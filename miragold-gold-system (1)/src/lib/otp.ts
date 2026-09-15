@@ -1,24 +1,7 @@
 import crypto from "crypto";
 import { db } from "@/db";
 import { otpCodes, users } from "@/db/schema";
-import { and, eq, gt, isNull } from "drizzle-orm";
-
-/**
- * OTP delivery is behind this single interface so a real SMS provider
- * (Twilio, a local Malaysian gateway, etc.) can be swapped in later by
- * only changing `sendOtp` below — nothing else in the app needs to
- * change.
- *
- * OTP_PROVIDER options:
- *  - "mock" (default) — logs the code to the server console instead of
- *    sending anything real. Free, fine for local dev.
- *  - "resend" — sends the OTP by email via Resend (https://resend.com),
- *    which has a free tier. Used for the Fasa 2 staff pilot since staff
- *    accounts are pre-provisioned with an email by an admin (see
- *    /admin/staff), so there is always an email on file to deliver to —
- *    no real SMS cost. Requires RESEND_API_KEY + OTP_FROM_EMAIL.
- *  - "twilio" — placeholder for real SMS, not implemented.
- */
+import { and, desc, eq, gt, isNull } from "drizzle-orm";
 
 const OTP_TTL_MINUTES = 5;
 const OTP_LENGTH = 6;
@@ -81,9 +64,6 @@ async function sendOtp(phone: string, code: string, email: string | null): Promi
   }
 
   if (provider === "twilio") {
-    // Placeholder for a real Twilio integration:
-    // const client = twilio(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN);
-    // await client.messages.create({ to: phone, from: process.env.TWILIO_FROM, body: `Miragold OTP: ${code}` });
     throw new Error("Twilio OTP provider not yet configured. Set TWILIO_* env vars and implement sendOtp().");
   }
 
@@ -95,9 +75,6 @@ export async function requestOtp(phone: string): Promise<{ expiresAt: Date }> {
   const codeHash = hashCode(code);
   const expiresAt = new Date(Date.now() + OTP_TTL_MINUTES * 60_000);
 
-  // Look up an existing account so a real email/SMS provider knows where to
-  // deliver the code. New (not-yet-registered) numbers have no row yet —
-  // sendOtp() decides how to handle that per-provider.
   const [existing] = await db.select().from(users).where(eq(users.phone, phone)).limit(1);
 
   await db.insert(otpCodes).values({
@@ -111,7 +88,7 @@ export async function requestOtp(phone: string): Promise<{ expiresAt: Date }> {
   return { expiresAt };
 }
 
-export async function verifyOtp(phone: string, code: string): Promise<boolean> {
+export async function checkOtp(phone: string, code: string): Promise<{ ok: boolean; otpId?: string }> {
   const codeHash = hashCode(code);
 
   const [record] = await db
@@ -124,20 +101,30 @@ export async function verifyOtp(phone: string, code: string): Promise<boolean> {
         gt(otpCodes.expiresAt, new Date()),
       ),
     )
-    .orderBy(otpCodes.createdAt)
+    .orderBy(desc(otpCodes.createdAt))
     .limit(1);
 
-  if (!record) return false;
-  if (Number(record.attempts) >= MAX_ATTEMPTS) return false;
+  if (!record) return { ok: false };
+  if (Number(record.attempts) >= MAX_ATTEMPTS) return { ok: false };
 
   if (record.codeHash !== codeHash) {
     await db
       .update(otpCodes)
       .set({ attempts: String(Number(record.attempts) + 1) })
       .where(eq(otpCodes.id, record.id));
-    return false;
+    return { ok: false };
   }
 
-  await db.update(otpCodes).set({ consumedAt: new Date() }).where(eq(otpCodes.id, record.id));
+  return { ok: true, otpId: record.id };
+}
+
+export async function consumeOtp(otpId: string): Promise<void> {
+  await db.update(otpCodes).set({ consumedAt: new Date() }).where(eq(otpCodes.id, otpId));
+}
+
+export async function verifyOtp(phone: string, code: string): Promise<boolean> {
+  const result = await checkOtp(phone, code);
+  if (!result.ok || !result.otpId) return false;
+  await consumeOtp(result.otpId);
   return true;
 }

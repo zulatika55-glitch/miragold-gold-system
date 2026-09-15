@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -27,11 +28,15 @@ export default function NavBar() {
   return (
     <header className="sticky top-0 z-10 border-b border-amber-900/10 bg-white/95 backdrop-blur">
       <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-        <Link href="/" className="flex items-center gap-2 text-lg font-semibold tracking-tight text-amber-900">
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-900 text-sm font-bold text-white">
-            M
-          </span>
-          MIRAGOLD
+        <Link href="/" className="flex items-center">
+          <Image
+            src="/miragold-logo.png"
+            alt="Miragold"
+            width={900}
+            height={400}
+            priority
+            className="h-8 w-auto sm:h-9"
+          />
         </Link>
         <nav className="flex items-center gap-4 text-sm">
           {!loading && me && (

@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 
 // Trust/legitimacy signals for a system that moves real money (spec's own
@@ -9,8 +10,8 @@ export default function Footer() {
     <footer className="border-t border-amber-900/10 bg-white">
       <div className="mx-auto grid max-w-5xl grid-cols-1 gap-8 px-6 py-10 text-sm sm:grid-cols-3">
         <div>
-          <p className="text-base font-semibold tracking-tight text-amber-900">MIRAGOLD</p>
-          <p className="mt-2 text-zinc-500">
+          <Image src="/miragold-logo.png" alt="Miragold" width={900} height={400} className="h-10 w-auto" />
+          <p className="mt-3 text-zinc-500">
             Gold Saving System — simpan &amp; kumpul gram Emas 916 dengan mudah dan selamat.
           </p>
         </div>

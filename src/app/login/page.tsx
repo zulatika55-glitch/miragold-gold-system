@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useState } from "react";
+import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 
 function LoginForm() {
@@ -65,70 +66,80 @@ function LoginForm() {
 
   return (
     <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center px-6 py-16">
-      <h1 className="text-2xl font-semibold text-zinc-900">Login / Register</h1>
-      <p className="mt-1 text-sm text-zinc-500">Guna nombor telefon dan kod OTP.</p>
+      <div className="flex justify-center">
+        <Image src="/miragold-logo.png" alt="Miragold" width={900} height={400} priority className="h-10 w-auto" />
+      </div>
 
-      <div className="mt-6 flex flex-col gap-3">
-        <label className="text-sm font-medium text-zinc-700">
-          Nombor telefon
-          <input
-            type="tel"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            disabled={step === "otp"}
-            placeholder="+60123456789"
-            className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 disabled:bg-zinc-100"
-          />
-        </label>
+      <div className="mt-8 rounded-2xl border border-amber-900/10 bg-white p-8 shadow-sm">
+        <h1 className="text-2xl font-semibold text-zinc-900">Login / Register</h1>
+        <p className="mt-1 text-sm text-zinc-500">Guna nombor telefon dan kod OTP.</p>
 
-        {step === "phone" && (
-          <button
-            onClick={requestOtp}
-            disabled={busy || phone.length < 8}
-            className="mt-2 rounded-full bg-amber-900 px-4 py-2 font-medium text-white disabled:opacity-50"
-          >
-            {busy ? "Menghantar..." : "Hantar OTP"}
-          </button>
-        )}
+        <div className="mt-6 flex flex-col gap-3">
+          <label className="text-sm font-medium text-zinc-700">
+            Nombor telefon
+            <input
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              disabled={step === "otp"}
+              placeholder="+60123456789"
+              className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 disabled:bg-zinc-100"
+            />
+          </label>
 
-        {step === "otp" && (
-          <>
-            {devHint && <p className="text-xs text-amber-700">{devHint}</p>}
-            <label className="text-sm font-medium text-zinc-700">
-              Kod OTP (6 digit)
-              <input
-                type="text"
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                maxLength={6}
-                className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2"
-              />
-            </label>
+          {step === "phone" && (
+            <button
+              onClick={requestOtp}
+              disabled={busy || phone.length < 8}
+              className="mt-2 rounded-full bg-amber-900 px-4 py-2 font-medium text-white transition hover:bg-amber-800 disabled:opacity-50"
+            >
+              {busy ? "Menghantar..." : "Hantar OTP"}
+            </button>
+          )}
 
-            {needsName && (
+          {step === "otp" && (
+            <>
+              {devHint && <p className="text-xs text-amber-700">{devHint}</p>}
               <label className="text-sm font-medium text-zinc-700">
-                Nama penuh
+                Kod OTP (6 digit)
                 <input
                   type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  maxLength={6}
                   className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2"
                 />
               </label>
-            )}
 
-            <button
-              onClick={verify}
-              disabled={busy || code.length !== 6 || (needsName && !name)}
-              className="mt-2 rounded-full bg-amber-900 px-4 py-2 font-medium text-white disabled:opacity-50"
-            >
-              {busy ? "Mengesahkan..." : "Sahkan & Masuk"}
-            </button>
-          </>
-        )}
+              {needsName && (
+                <label className="text-sm font-medium text-zinc-700">
+                  Nama penuh
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2"
+                  />
+                </label>
+              )}
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+              <button
+                onClick={verify}
+                disabled={busy || code.length !== 6 || (needsName && !name)}
+                className="mt-2 rounded-full bg-amber-900 px-4 py-2 font-medium text-white transition hover:bg-amber-800 disabled:opacity-50"
+              >
+                {busy ? "Mengesahkan..." : "Sahkan & Masuk"}
+              </button>
+            </>
+          )}
+
+          {error && <p className="text-sm text-red-600">{error}</p>}
+        </div>
       </div>
+
+      <p className="mt-6 text-center text-xs text-zinc-400">
+        Sambungan disulitkan (SSL) — data anda selamat dengan Miragold.
+      </p>
     </main>
   );
 }

@@ -3,6 +3,23 @@ import { db } from "@/db";
 import { otpCodes, users } from "@/db/schema";
 import { and, desc, eq, gt, isNull } from "drizzle-orm";
 
+/**
+ * OTP delivery is behind this single interface so a real SMS provider
+ * (Twilio, a local Malaysian gateway, etc.) can be swapped in later by
+ * only changing `sendOtp` below — nothing else in the app needs to
+ * change.
+ *
+ * OTP_PROVIDER options:
+ *  - "mock" (default) — logs the code to the server console instead of
+ *    sending anything real. Free, fine for local dev.
+ *  - "resend" — sends the OTP by email via Resend (https://resend.com),
+ *    which has a free tier. Used for the Fasa 2 staff pilot since staff
+ *    accounts are pre-provisioned with an email by an admin (see
+ *    /admin/staff), so there is always an email on file to deliver to —
+ *    no real SMS cost. Requires RESEND_API_KEY + OTP_FROM_EMAIL.
+ *  - "twilio" — placeholder for real SMS, not implemented.
+ */
+
 const OTP_TTL_MINUTES = 5;
 const OTP_LENGTH = 6;
 const MAX_ATTEMPTS = 5;
@@ -64,6 +81,9 @@ async function sendOtp(phone: string, code: string, email: string | null): Promi
   }
 
   if (provider === "twilio") {
+    // Placeholder for a real Twilio integration:
+    // const client = twilio(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN);
+    // await client.messages.create({ to: phone, from: process.env.TWILIO_FROM, body: `Miragold OTP: ${code}` });
     throw new Error("Twilio OTP provider not yet configured. Set TWILIO_* env vars and implement sendOtp().");
   }
 
@@ -75,6 +95,9 @@ export async function requestOtp(phone: string): Promise<{ expiresAt: Date }> {
   const codeHash = hashCode(code);
   const expiresAt = new Date(Date.now() + OTP_TTL_MINUTES * 60_000);
 
+  // Look up an existing account so a real email/SMS provider knows where to
+  // deliver the code. New (not-yet-registered) numbers have no row yet —
+  // sendOtp() decides how to handle that per-provider.
   const [existing] = await db.select().from(users).where(eq(users.phone, phone)).limit(1);
 
   await db.insert(otpCodes).values({
@@ -88,9 +111,22 @@ export async function requestOtp(phone: string): Promise<{ expiresAt: Date }> {
   return { expiresAt };
 }
 
+/**
+ * Checks the code without consuming it. Deliberately split from
+ * `consumeOtp()` below: the verify-otp route has a two-step registration
+ * path (submit phone+code -> if the account doesn't exist yet, ask for a
+ * name -> resubmit phone+code+name) and both submissions re-check the SAME
+ * code. If the first check consumed the code, the second (with name) would
+ * always fail as "invalid/expired" — that was a real bug (every brand-new
+ * registration was broken). The route calls `consumeOtp()` itself once the
+ * whole login/registration actually succeeds.
+ */
 export async function checkOtp(phone: string, code: string): Promise<{ ok: boolean; otpId?: string }> {
   const codeHash = hashCode(code);
 
+  // Most recent first: if a customer requests a second code (e.g. the
+  // first expired while they were slow to enter it), only the latest one
+  // they actually received should be checked against.
   const [record] = await db
     .select()
     .from(otpCodes)
@@ -122,6 +158,8 @@ export async function consumeOtp(otpId: string): Promise<void> {
   await db.update(otpCodes).set({ consumedAt: new Date() }).where(eq(otpCodes.id, otpId));
 }
 
+/** Convenience wrapper for callers that don't need the two-step flow (just
+ * check-and-consume in one call). */
 export async function verifyOtp(phone: string, code: string): Promise<boolean> {
   const result = await checkOtp(phone, code);
   if (!result.ok || !result.otpId) return false;

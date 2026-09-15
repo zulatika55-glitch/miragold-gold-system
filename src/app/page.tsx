@@ -70,6 +70,12 @@ export default function Home() {
       <p className="mt-10 max-w-md text-xs text-zinc-400">
         Harga boleh dilihat tanpa login. Login/pendaftaran diperlukan hanya apabila anda membuat transaksi.
       </p>
+
+      <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-zinc-400">
+        <span>🔒 Sambungan disulitkan (SSL)</span>
+        <span>💳 Pembayaran melalui Billplz</span>
+        <span>📒 Setiap transaksi direkod &amp; boleh disemak</span>
+      </div>
     </main>
   );
 }

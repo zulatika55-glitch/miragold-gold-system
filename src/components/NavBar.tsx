@@ -25,9 +25,12 @@ export default function NavBar() {
   }
 
   return (
-    <header className="border-b border-amber-900/10 bg-white">
-      <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
-        <Link href="/" className="text-lg font-semibold tracking-tight text-amber-900">
+    <header className="sticky top-0 z-10 border-b border-amber-900/10 bg-white/95 backdrop-blur">
+      <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+        <Link href="/" className="flex items-center gap-2 text-lg font-semibold tracking-tight text-amber-900">
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-900 text-sm font-bold text-white">
+            M
+          </span>
           MIRAGOLD
         </Link>
         <nav className="flex items-center gap-4 text-sm">
@@ -37,11 +40,11 @@ export default function NavBar() {
                 Gold Wallet
               </Link>
               {["ADMIN", "OWNER"].includes(me.role) && (
-                <Link href="/admin/staff" className="text-zinc-700 hover:text-amber-900">
-                  Admin
+                <Link href="/admin" className="text-zinc-700 hover:text-amber-900">
+                  Panel Admin
                 </Link>
               )}
-              <span className="text-zinc-400">{me.name}</span>
+              <span className="hidden text-zinc-400 sm:inline">{me.name}</span>
               <button onClick={logout} className="text-zinc-500 hover:text-amber-900">
                 Log out
               </button>

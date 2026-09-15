@@ -11,9 +11,11 @@ import { writeAuditLog } from "@/lib/audit";
 const bodySchema = z.object({
   phone: z.string().min(8).max(20),
   code: z.string().length(6),
-  name: z.string().min(1).max(255).optional(),
+  name: z.string().min(1).max(255).optional(), // required on first-time registration
 });
 
+// Module 02 — verifies OTP, creates the customer on first login (spec:
+// "Customer ID unik diwujudkan semasa registration"), then starts a session.
 export async function POST(req: Request) {
   const parsed = bodySchema.safeParse(await req.json());
   if (!parsed.success) {
@@ -21,6 +23,9 @@ export async function POST(req: Request) {
   }
   const { phone, code, name } = parsed.data;
 
+  // Check without consuming yet — a brand-new number needs a second
+  // round-trip (this same code, plus a name) before the code is actually
+  // spent, so a first-time registration doesn't burn the code on step one.
   const { ok, otpId } = await checkOtp(phone, code);
   if (!ok || !otpId) {
     return NextResponse.json({ error: "Invalid or expired OTP" }, { status: 401 });
@@ -55,6 +60,8 @@ export async function POST(req: Request) {
   }
 
   if (user.status !== "ACTIVE") {
+    // Still consume the code — it was correct, so it shouldn't remain
+    // usable for a second attempt just because the account is blocked.
     await consumeOtp(otpId);
     return NextResponse.json({ error: `Account is ${user.status}. Contact Miragold support.` }, { status: 403 });
   }

@@ -12,6 +12,17 @@ const bodySchema = z.object({
   buybackPrice916: z.number().positive(),
 });
 
+// Recent price history for the admin price page.
+export async function GET() {
+  const user = await getCurrentUser();
+  if (!user || !isAdminOrAbove(user.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const rows = await db.select().from(goldPrices).orderBy(desc(goldPrices.effectiveAt)).limit(30);
+  return NextResponse.json({ prices: rows });
+}
+
 // Module 10 / spec 4.5: "Admin hanya update harga 1g; sistem auto-calculate
 // RM100 equivalent." Every change is timestamped + audit logged (4.6, 13).
 export async function POST(req: Request) {

@@ -100,18 +100,42 @@ export default function AdminPricePage() {
 
   if (me === undefined) return null;
 
+  const current = prices[0];
+
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-6 py-12">
-      <Link href="/admin" className="text-sm text-amber-900 hover:underline">
+      <Link href="/admin" className="inline-flex items-center gap-1 text-sm text-amber-900 hover:underline">
         ← Panel Admin
       </Link>
-      <h1 className="mt-2 text-2xl font-semibold text-zinc-900">Urus Harga Emas 916</h1>
-      <p className="mt-1 text-sm text-zinc-500">
-        Harga baharu terpakai serta-merta untuk order akan datang. Order yang harganya sudah dikunci (checkout
-        sedia ada) tidak terjejas.
-      </p>
+      <div className="mt-2 flex items-center gap-3">
+        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-900/10 text-lg">💰</span>
+        <div>
+          <h1 className="text-2xl font-semibold text-zinc-900">Urus Harga Emas 916</h1>
+          <p className="text-sm text-zinc-500">
+            Harga baharu terpakai serta-merta untuk order akan datang.
+          </p>
+        </div>
+      </div>
 
-      <div className="mt-6 rounded-2xl border border-amber-900/10 bg-white p-6">
+      {current && (
+        <div className="mt-6 grid grid-cols-2 gap-3">
+          <div className="rounded-2xl border border-amber-900/20 bg-amber-900/5 p-5">
+            <p className="text-xs text-zinc-500">Harga Jual Semasa</p>
+            <p className="mt-1 text-2xl font-bold text-amber-900">RM{current.sellPrice916}</p>
+            <p className="mt-1 text-[11px] text-zinc-400">
+              Dikemaskini {new Date(current.effectiveAt).toLocaleString("ms-MY")}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-amber-900/10 bg-white p-5">
+            <p className="text-xs text-zinc-500">Harga Beli Balik Semasa</p>
+            <p className="mt-1 text-2xl font-bold text-zinc-900">RM{current.buybackPrice916}</p>
+            <p className="mt-1 text-[11px] text-zinc-400">per gram</p>
+          </div>
+        </div>
+      )}
+
+      <p className="mt-8 text-xs font-medium uppercase tracking-widest text-zinc-400">Kemaskini Harga</p>
+      <div className="mt-3 rounded-2xl border border-amber-900/10 bg-white p-6">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="text-sm font-medium text-zinc-700">
             Harga Jual (RM/gram)
@@ -152,7 +176,7 @@ export default function AdminPricePage() {
           <button
             onClick={() => submitPrice(false)}
             disabled={busy || !sell || !buyback}
-            className="mt-4 rounded-full bg-amber-900 px-5 py-2.5 font-medium text-white disabled:opacity-50"
+            className="mt-4 rounded-full bg-amber-900 px-5 py-2.5 font-medium text-white transition hover:bg-amber-800 disabled:opacity-50"
           >
             {busy ? "Mengemaskini..." : "Kemaskini Harga"}
           </button>
@@ -161,7 +185,7 @@ export default function AdminPricePage() {
             <button
               onClick={() => submitPrice(true)}
               disabled={busy}
-              className="rounded-full bg-red-700 px-5 py-2.5 font-medium text-white disabled:opacity-50"
+              className="rounded-full bg-red-700 px-5 py-2.5 font-medium text-white transition hover:bg-red-800 disabled:opacity-50"
             >
               Ya, Sahkan Perubahan
             </button>
@@ -170,7 +194,7 @@ export default function AdminPricePage() {
                 setConfirmNeeded(false);
                 setWarning(null);
               }}
-              className="rounded-full border border-zinc-300 px-5 py-2.5 text-zinc-700"
+              className="rounded-full border border-zinc-300 px-5 py-2.5 text-zinc-700 transition hover:border-zinc-400"
             >
               Batal
             </button>
@@ -178,12 +202,12 @@ export default function AdminPricePage() {
         )}
       </div>
 
-      <h2 className="mt-8 text-lg font-medium text-zinc-900">Sejarah Harga</h2>
+      <p className="mt-8 text-xs font-medium uppercase tracking-widest text-zinc-400">Sejarah Harga</p>
       {loading && <p className="mt-2 text-zinc-400">Memuatkan...</p>}
       {error && <p className="mt-2 text-red-600">{error}</p>}
 
       {!loading && (
-        <div className="mt-2 overflow-x-auto rounded-lg border border-zinc-200 bg-white">
+        <div className="mt-3 overflow-x-auto rounded-xl border border-zinc-200 bg-white">
           <table className="w-full text-left text-sm">
             <thead className="bg-zinc-50 text-zinc-500">
               <tr>
@@ -193,13 +217,24 @@ export default function AdminPricePage() {
               </tr>
             </thead>
             <tbody>
-              {prices.map((p) => (
-                <tr key={p.id} className="border-t border-zinc-100">
-                  <td className="px-3 py-2 text-zinc-500">{new Date(p.effectiveAt).toLocaleString("ms-MY")}</td>
-                  <td className="px-3 py-2">RM{p.sellPrice916}</td>
-                  <td className="px-3 py-2">RM{p.buybackPrice916}</td>
-                </tr>
-              ))}
+              {prices.map((p, i) => {
+                const prev = prices[i + 1];
+                const trend = prev ? Number(p.sellPrice916) - Number(prev.sellPrice916) : 0;
+                return (
+                  <tr key={p.id} className="border-t border-zinc-100 odd:bg-white even:bg-zinc-50/50">
+                    <td className="px-3 py-2 text-zinc-500">{new Date(p.effectiveAt).toLocaleString("ms-MY")}</td>
+                    <td className="px-3 py-2">
+                      <span className={i === 0 ? "font-medium text-zinc-900" : ""}>RM{p.sellPrice916}</span>
+                      {trend !== 0 && (
+                        <span className={`ml-1.5 text-xs ${trend > 0 ? "text-emerald-600" : "text-red-600"}`}>
+                          {trend > 0 ? "▲" : "▼"}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2">RM{p.buybackPrice916}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 type StaffUser = {
   id: string;
@@ -17,6 +18,32 @@ type StaffUser = {
 
 const ROLES = ["CUSTOMER", "STAFF", "SUPERVISOR", "ADMIN"] as const;
 const STATUSES = ["ACTIVE", "SUSPENDED", "REVIEW", "CLOSED"] as const;
+
+function roleBadgeClass(role: StaffUser["role"]): string {
+  switch (role) {
+    case "ADMIN":
+      return "border-amber-300 bg-amber-100 text-amber-900";
+    case "SUPERVISOR":
+      return "border-sky-200 bg-sky-50 text-sky-800";
+    case "STAFF":
+      return "border-violet-200 bg-violet-50 text-violet-800";
+    default:
+      return "border-zinc-200 bg-zinc-50 text-zinc-700";
+  }
+}
+
+function statusBadgeClass(status: StaffUser["status"]): string {
+  switch (status) {
+    case "ACTIVE":
+      return "border-emerald-200 bg-emerald-50 text-emerald-800";
+    case "SUSPENDED":
+      return "border-red-200 bg-red-50 text-red-800";
+    case "REVIEW":
+      return "border-amber-200 bg-amber-50 text-amber-800";
+    default:
+      return "border-zinc-200 bg-zinc-100 text-zinc-600";
+  }
+}
 
 export default function AdminStaffPage() {
   const router = useRouter();
@@ -139,10 +166,20 @@ export default function AdminStaffPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col px-6 py-12">
-      <h1 className="text-2xl font-semibold text-zinc-900">Urus Staff / Pilot</h1>
-      <p className="mt-1 text-sm text-zinc-500">
-        Tambah akaun staff (login guna phone + OTP sama macam customer), atau tag akaun sedia ada sebagai STAFF.
-      </p>
+      <Link href="/admin" className="inline-flex items-center gap-1 text-sm text-amber-900 hover:underline">
+        ← Panel Admin
+      </Link>
+      <div className="mt-2 flex items-center gap-3">
+        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-900/10 text-lg">
+          🧑‍💼
+        </span>
+        <div>
+          <h1 className="text-2xl font-semibold text-zinc-900">Urus Staff / Pilot</h1>
+          <p className="text-sm text-zinc-500">
+            Tambah akaun staff (login guna phone + OTP sama macam customer), atau tag akaun sedia ada.
+          </p>
+        </div>
+      </div>
 
       <form onSubmit={addStaff} className="mt-6 grid grid-cols-1 gap-3 rounded-2xl border border-amber-900/10 bg-white p-6 sm:grid-cols-2">
         <h2 className="col-span-full text-lg font-medium text-zinc-900">Tambah Staff Baharu</h2>
@@ -190,7 +227,7 @@ export default function AdminStaffPage() {
         {formError && <p className="col-span-full text-sm text-red-600">{formError}</p>}
         <button
           disabled={formBusy}
-          className="col-span-full mt-2 rounded-full bg-amber-900 px-4 py-2 font-medium text-white disabled:opacity-50 sm:w-fit"
+          className="col-span-full mt-2 rounded-full bg-amber-900 px-4 py-2 font-medium text-white transition hover:bg-amber-800 disabled:opacity-50 sm:w-fit"
         >
           {formBusy ? "Menambah..." : "Tambah Staff"}
         </button>
@@ -204,7 +241,10 @@ export default function AdminStaffPage() {
           placeholder="Cari nama / phone / customer ID / emel..."
           className="w-full max-w-sm rounded-lg border border-zinc-300 px-3 py-2 text-sm"
         />
-        <button onClick={() => load(q)} className="rounded-full border border-zinc-300 px-4 py-2 text-sm text-zinc-700">
+        <button
+          onClick={() => load(q)}
+          className="rounded-full border border-zinc-300 px-4 py-2 text-sm text-zinc-700 transition hover:border-amber-900/40"
+        >
           Cari
         </button>
       </div>
@@ -213,7 +253,7 @@ export default function AdminStaffPage() {
       {loading && <p className="mt-4 text-zinc-400">Memuatkan...</p>}
 
       {!loading && (
-        <div className="mt-4 overflow-x-auto rounded-lg border border-zinc-200 bg-white">
+        <div className="mt-4 overflow-x-auto rounded-xl border border-zinc-200 bg-white">
           <table className="w-full text-left text-sm">
             <thead className="bg-zinc-50 text-zinc-500">
               <tr>
@@ -234,20 +274,22 @@ export default function AdminStaffPage() {
                 </tr>
               )}
               {users.map((u) => (
-                <tr key={u.id} className="border-t border-zinc-100">
+                <tr key={u.id} className="border-t border-zinc-100 odd:bg-white even:bg-zinc-50/50">
                   <td className="px-3 py-2 text-zinc-500">{u.customerId}</td>
-                  <td className="px-3 py-2">{u.name}</td>
+                  <td className="px-3 py-2 font-medium text-zinc-900">{u.name}</td>
                   <td className="px-3 py-2">{u.phone}</td>
                   <td className="px-3 py-2 text-zinc-500">{u.email ?? "—"}</td>
                   <td className="px-3 py-2">
                     {u.role === "OWNER" ? (
-                      <span className="font-medium text-amber-900">OWNER</span>
+                      <span className="rounded-full bg-amber-900 px-2.5 py-1 text-xs font-medium text-white">
+                        OWNER
+                      </span>
                     ) : (
                       <select
                         value={u.role}
                         disabled={savingId === u.id}
                         onChange={(e) => updateUser(u.id, { role: e.target.value as StaffUser["role"] })}
-                        className="rounded border border-zinc-300 px-2 py-1 text-xs"
+                        className={`rounded-full border px-2.5 py-1 text-xs font-medium ${roleBadgeClass(u.role)}`}
                       >
                         {ROLES.map((r) => (
                           <option key={r} value={r}>
@@ -259,13 +301,15 @@ export default function AdminStaffPage() {
                   </td>
                   <td className="px-3 py-2">
                     {u.role === "OWNER" ? (
-                      <span className="text-zinc-500">{u.status}</span>
+                      <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-800">
+                        {u.status}
+                      </span>
                     ) : (
                       <select
                         value={u.status}
                         disabled={savingId === u.id}
                         onChange={(e) => updateUser(u.id, { status: e.target.value as StaffUser["status"] })}
-                        className="rounded border border-zinc-300 px-2 py-1 text-xs"
+                        className={`rounded-full border px-2.5 py-1 text-xs font-medium ${statusBadgeClass(u.status)}`}
                       >
                         {STATUSES.map((s) => (
                           <option key={s} value={s}>

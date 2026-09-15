@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { verifyOtp } from "@/lib/otp";
+import { checkOtp, consumeOtp } from "@/lib/otp";
 import { createSession } from "@/lib/auth";
 import { newCustomerId } from "@/lib/refs";
 import { writeAuditLog } from "@/lib/audit";
@@ -11,11 +11,9 @@ import { writeAuditLog } from "@/lib/audit";
 const bodySchema = z.object({
   phone: z.string().min(8).max(20),
   code: z.string().length(6),
-  name: z.string().min(1).max(255).optional(), // required on first-time registration
+  name: z.string().min(1).max(255).optional(),
 });
 
-// Module 02 — verifies OTP, creates the customer on first login (spec:
-// "Customer ID unik diwujudkan semasa registration"), then starts a session.
 export async function POST(req: Request) {
   const parsed = bodySchema.safeParse(await req.json());
   if (!parsed.success) {
@@ -23,8 +21,8 @@ export async function POST(req: Request) {
   }
   const { phone, code, name } = parsed.data;
 
-  const ok = await verifyOtp(phone, code);
-  if (!ok) {
+  const { ok, otpId } = await checkOtp(phone, code);
+  if (!ok || !otpId) {
     return NextResponse.json({ error: "Invalid or expired OTP" }, { status: 401 });
   }
 
@@ -57,9 +55,11 @@ export async function POST(req: Request) {
   }
 
   if (user.status !== "ACTIVE") {
+    await consumeOtp(otpId);
     return NextResponse.json({ error: `Account is ${user.status}. Contact Miragold support.` }, { status: 403 });
   }
 
+  await consumeOtp(otpId);
   await createSession(user.id, user.customerId, user.role);
 
   return NextResponse.json({

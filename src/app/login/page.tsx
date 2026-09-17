@@ -65,82 +65,183 @@ function LoginForm() {
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center px-6 py-16">
-      <div className="flex justify-center">
-        <Image src="/miragold-logo.png" alt="Miragold" width={900} height={400} priority className="h-10 w-auto" />
-      </div>
+    <main className="relative mx-auto flex w-full max-w-6xl flex-1 items-center overflow-hidden px-6 py-12">
+      {/* ambient decoration */}
+      <div className="glow-orb animate-float-slow -left-24 top-10 h-72 w-72 bg-amber-400/20" />
+      <div className="glow-orb animate-float-slower right-0 top-1/3 h-80 w-80 bg-amber-700/10" />
+      <div className="grid-mesh absolute inset-x-0 top-0 h-72" />
 
-      <div className="mt-8 rounded-2xl border border-amber-900/10 bg-white p-8 shadow-sm">
-        <h1 className="text-2xl font-semibold text-zinc-900">Login / Register</h1>
-        <p className="mt-1 text-sm text-zinc-500">Guna nombor telefon dan kod OTP.</p>
+      <div className="relative z-10 grid w-full items-center gap-10 lg:grid-cols-2">
+        {/* Branding / trust panel */}
+        <div className="hidden lg:block">
+          <div className="inline-flex items-center gap-2 rounded-full border border-amber-900/15 bg-white/70 px-4 py-1.5 text-xs font-medium uppercase tracking-widest text-amber-800 backdrop-blur">
+            <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            Gold Saving System
+          </div>
+          <h1 className="mt-6 text-4xl font-semibold leading-tight tracking-tight text-zinc-900">
+            Simpan emas 916,
+            <br />
+            <span className="bg-gradient-to-r from-amber-700 via-amber-500 to-yellow-600 bg-clip-text text-transparent">
+              selamat &amp; telus.
+            </span>
+          </h1>
+          <p className="mt-4 max-w-sm text-sm text-zinc-500">
+            Log masuk dengan nombor telefon anda — tiada kata laluan untuk diingati. Kod OTP sekali guna dihantar
+            terus kepada anda setiap kali log masuk.
+          </p>
 
-        <div className="mt-6 flex flex-col gap-3">
-          <label className="text-sm font-medium text-zinc-700">
-            Nombor telefon
-            <input
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              disabled={step === "otp"}
-              placeholder="+60123456789"
-              className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 disabled:bg-zinc-100"
-            />
-          </label>
+          <div className="mt-10 flex flex-col gap-4">
+            <TrustRow icon="🔒" title="Sambungan disulitkan" desc="HTTPS/SSL end-to-end untuk setiap sesi." />
+            <TrustRow icon="📒" title="Log audit tidak boleh diubah" desc="Setiap transaksi direkod secara kekal." />
+            <TrustRow icon="💳" title="Pembayaran oleh Billplz" desc="Payment gateway berdaftar & dipercayai." />
+          </div>
+        </div>
 
-          {step === "phone" && (
-            <button
-              onClick={requestOtp}
-              disabled={busy || phone.length < 8}
-              className="mt-2 rounded-full bg-amber-900 px-4 py-2 font-medium text-white transition hover:bg-amber-800 disabled:opacity-50"
-            >
-              {busy ? "Menghantar..." : "Hantar OTP"}
-            </button>
-          )}
+        {/* Form panel */}
+        <div className="mx-auto w-full max-w-sm">
+          <div className="flex justify-center lg:hidden">
+            <Image src="/miragold-logo.png" alt="Miragold" width={900} height={400} priority className="h-10 w-auto" />
+          </div>
 
-          {step === "otp" && (
-            <>
-              {devHint && <p className="text-xs text-amber-700">{devHint}</p>}
+          <div className="relative mt-8 overflow-hidden rounded-3xl border border-amber-900/10 bg-white/80 p-8 shadow-[0_8px_40px_-12px_rgba(120,53,15,0.15)] backdrop-blur lg:mt-0">
+            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-amber-600 via-amber-400 to-yellow-500" />
+
+            <h1 className="text-2xl font-semibold text-zinc-900">Log Masuk / Daftar</h1>
+            <p className="mt-1 text-sm text-zinc-500">Guna nombor telefon dan kod OTP.</p>
+
+            {/* step indicator */}
+            <div className="mt-6 flex items-center gap-2 text-xs font-medium">
+              <StepPill active={step === "phone"} done={step === "otp"} label="1" text="Nombor telefon" />
+              <span className="h-px flex-1 bg-zinc-200" />
+              <StepPill active={step === "otp"} done={false} label="2" text="Kod OTP" />
+            </div>
+
+            <div className="mt-6 flex flex-col gap-3">
               <label className="text-sm font-medium text-zinc-700">
-                Kod OTP (6 digit)
-                <input
-                  type="text"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  maxLength={6}
-                  className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2"
-                />
+                Nombor telefon
+                <div className="relative mt-1">
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400">📱</span>
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    disabled={step === "otp"}
+                    placeholder="+60123456789"
+                    className="w-full rounded-xl border border-zinc-300 bg-white py-2.5 pl-9 pr-3 outline-none transition focus:border-amber-700 focus:ring-2 focus:ring-amber-700/20 disabled:bg-zinc-100 disabled:text-zinc-500"
+                  />
+                </div>
               </label>
 
-              {needsName && (
-                <label className="text-sm font-medium text-zinc-700">
-                  Nama penuh
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2"
-                  />
-                </label>
+              {step === "phone" && (
+                <button
+                  onClick={requestOtp}
+                  disabled={busy || phone.length < 8}
+                  className="group relative mt-2 overflow-hidden rounded-full bg-gradient-to-r from-amber-800 to-amber-950 px-4 py-2.5 font-medium text-white shadow-lg shadow-amber-900/20 transition hover:from-amber-700 hover:to-amber-900 disabled:opacity-50 disabled:shadow-none"
+                >
+                  {!busy && <span className="shimmer-sweep" />}
+                  <span className="relative">{busy ? "Menghantar..." : "Hantar OTP"}</span>
+                </button>
               )}
 
-              <button
-                onClick={verify}
-                disabled={busy || code.length !== 6 || (needsName && !name)}
-                className="mt-2 rounded-full bg-amber-900 px-4 py-2 font-medium text-white transition hover:bg-amber-800 disabled:opacity-50"
-              >
-                {busy ? "Mengesahkan..." : "Sahkan & Masuk"}
-              </button>
-            </>
-          )}
+              {step === "otp" && (
+                <>
+                  {devHint && (
+                    <p className="rounded-lg border border-amber-900/10 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                      {devHint}
+                    </p>
+                  )}
+                  <label className="text-sm font-medium text-zinc-700">
+                    Kod OTP (6 digit)
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={code}
+                      onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                      maxLength={6}
+                      placeholder="••••••"
+                      className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-center text-lg font-semibold tracking-[0.5em] outline-none transition focus:border-amber-700 focus:ring-2 focus:ring-amber-700/20"
+                    />
+                  </label>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+                  {needsName && (
+                    <label className="text-sm font-medium text-zinc-700">
+                      Nama penuh
+                      <input
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2.5 outline-none transition focus:border-amber-700 focus:ring-2 focus:ring-amber-700/20"
+                      />
+                    </label>
+                  )}
+
+                  <button
+                    onClick={verify}
+                    disabled={busy || code.length !== 6 || (needsName && !name)}
+                    className="group relative mt-2 overflow-hidden rounded-full bg-gradient-to-r from-amber-800 to-amber-950 px-4 py-2.5 font-medium text-white shadow-lg shadow-amber-900/20 transition hover:from-amber-700 hover:to-amber-900 disabled:opacity-50 disabled:shadow-none"
+                  >
+                    {!busy && <span className="shimmer-sweep" />}
+                    <span className="relative">{busy ? "Mengesahkan..." : "Sahkan & Masuk"}</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setStep("phone");
+                      setCode("");
+                      setError(null);
+                    }}
+                    className="text-center text-xs text-zinc-400 hover:text-amber-800 hover:underline"
+                  >
+                    Tukar nombor telefon
+                  </button>
+                </>
+              )}
+
+              {error && (
+                <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
+              )}
+            </div>
+          </div>
+
+          <p className="mt-6 flex items-center justify-center gap-1.5 text-center text-xs text-zinc-400">
+            <span>🔒</span> Sambungan disulitkan (SSL) — data anda selamat dengan Miragold.
+          </p>
         </div>
       </div>
-
-      <p className="mt-6 text-center text-xs text-zinc-400">
-        Sambungan disulitkan (SSL) — data anda selamat dengan Miragold.
-      </p>
     </main>
+  );
+}
+
+function TrustRow({ icon, title, desc }: { icon: string; title: string; desc: string }) {
+  return (
+    <div className="flex items-start gap-3">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-amber-900/10 bg-white text-base shadow-sm">
+        {icon}
+      </span>
+      <div>
+        <p className="text-sm font-medium text-zinc-800">{title}</p>
+        <p className="text-xs text-zinc-500">{desc}</p>
+      </div>
+    </div>
+  );
+}
+
+function StepPill({ active, done, label, text }: { active: boolean; done: boolean; label: string; text: string }) {
+  return (
+    <div className={`flex items-center gap-1.5 ${active ? "text-amber-900" : done ? "text-emerald-700" : "text-zinc-400"}`}>
+      <span
+        className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${
+          active
+            ? "bg-amber-900 text-white"
+            : done
+              ? "bg-emerald-500 text-white"
+              : "border border-zinc-300 text-zinc-400"
+        }`}
+      >
+        {done ? "✓" : label}
+      </span>
+      <span className="hidden sm:inline">{text}</span>
+    </div>
   );
 }
 

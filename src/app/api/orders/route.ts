@@ -48,6 +48,7 @@ export async function GET() {
         lockExpiresAt: o.lockExpiresAt,
         billplzBillId: payment?.providerBillId ?? null,
         paymentStatus: payment?.status ?? "PENDING",
+        paymentUrl: o.status === "PENDING" ? o.billplzUrl : null,
       };
     }),
   });
@@ -120,12 +121,17 @@ export async function POST(req: Request) {
       redirectUrl: `${appBaseUrl}/api/payments/billplz/redirect?order=${order.orderRef}`,
     });
 
+    // Persist the hosted payment page so a customer who leaves before paying
+    // can resume from their transaction history ("Teruskan Pembayaran")
+    // instead of losing the bill link once this response is gone.
+    await db.update(orders).set({ billplzUrl: bill.url }).where(eq(orders.id, order.id));
+
     return NextResponse.json({
       order: {
         orderRef: order.orderRef,
-        amountRm: order.amountRm,
-        priceSnapshot: order.priceSnapshot,
-        gram: order.gram,
+        amountRm: formatRm(order.amountRm),
+        priceSnapshot: formatRm(order.priceSnapshot),
+        gram: formatGram(order.gram),
         lockExpiresAt: order.lockExpiresAt,
         status: order.status,
       },

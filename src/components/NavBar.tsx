@@ -47,30 +47,42 @@ export default function NavBar() {
   return (
     <header className="sticky top-0 z-10 border-b border-amber-900/10 bg-white/95 backdrop-blur">
       <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-        <Link href={me ? "/wallet" : "/"} className="flex items-center gap-3">
-          <Image
-            src="/miragold-logo.png"
-            alt="Miragold"
-            width={900}
-            height={400}
-            priority
-            className="h-8 w-auto sm:h-9"
-          />
-          {!loading && me && (
+        <div className="flex items-center gap-4">
+          <Link href={me ? "/wallet" : "/"} className="flex items-center gap-3">
+            <Image
+              src="/miragold-logo.png"
+              alt="Miragold"
+              width={900}
+              height={400}
+              priority
+              className="h-8 w-auto sm:h-9"
+            />
+            {!loading && me && (
+              <>
+                <span className="hidden h-5 w-px bg-zinc-200 sm:block" />
+                <span className="hidden text-sm font-medium text-zinc-500 sm:block">Gold Wallet</span>
+              </>
+            )}
+          </Link>
+          {!loading && (
             <>
               <span className="hidden h-5 w-px bg-zinc-200 sm:block" />
-              <span className="hidden text-sm font-medium text-zinc-500 sm:block">Gold Wallet</span>
+              <a
+                href={CATALOG_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hidden text-sm text-zinc-700 hover:text-amber-900 sm:block"
+              >
+                Katalog Barang Kemas
+              </a>
             </>
           )}
-        </Link>
+        </div>
 
         {/* Desktop nav */}
         <nav className="hidden items-center gap-5 text-sm sm:flex">
           {!loading && me && (
             <>
-              <a href={CATALOG_URL} className="text-zinc-700 hover:text-amber-900">
-                Katalog Barang Kemas
-              </a>
               {["ADMIN", "OWNER"].includes(me.role) && (
                 <Link href="/admin" className="text-zinc-700 hover:text-amber-900">
                   Panel Admin
@@ -131,14 +143,9 @@ export default function NavBar() {
             </>
           )}
           {!loading && !me && (
-            <>
-              <a href={CATALOG_URL} className="text-zinc-700 hover:text-amber-900">
-                Katalog Barang Kemas
-              </a>
-              <Link href="/login" className="rounded-full bg-amber-900 px-4 py-1.5 text-white hover:bg-amber-800">
-                Login / Register
-              </Link>
-            </>
+            <Link href="/login" className="rounded-full bg-amber-900 px-4 py-1.5 text-white hover:bg-amber-800">
+              Login / Register
+            </Link>
           )}
         </nav>
 

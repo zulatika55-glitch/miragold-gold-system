@@ -5,7 +5,7 @@ import { users, walletLedger } from "@/db/schema";
 import { desc, eq, ilike, or } from "drizzle-orm";
 import { getCurrentUser, isAdminOrAbove } from "@/lib/auth";
 import { postLedgerEntry } from "@/lib/wallet";
-import { toDecimal } from "@/lib/decimal";
+import { formatGram, toDecimal } from "@/lib/decimal";
 import { writeAuditLog } from "@/lib/audit";
 
 // Spec 13 (Audit & Security): staff/admin must never edit a customer's
@@ -36,7 +36,9 @@ export async function GET() {
     .orderBy(desc(walletLedger.timestamp))
     .limit(100);
 
-  return NextResponse.json({ adjustments: rows });
+  return NextResponse.json({
+    adjustments: rows.map((r) => ({ ...r, gram: formatGram(r.gram) })),
+  });
 }
 
 const bodySchema = z.object({

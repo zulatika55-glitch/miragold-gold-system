@@ -16,9 +16,23 @@ Decimal.set({ precision: 40, rounding: Decimal.ROUND_HALF_UP });
 
 export { Decimal };
 
-export const GRAM_DISPLAY_DECIMALS = 4; // spec: UI shows 4 decimal places
+export const GRAM_DISPLAY_DECIMALS = 2; // UI shows 2 decimal places (sir zul, 17/9)
 export const GRAM_STORAGE_DECIMALS = 8; // DB keeps higher precision
 export const RM_STORAGE_DECIMALS = 6;
+// Admin reconciliation figures (e.g. Total Gold Wallet Liability) need more
+// precision than the 2dp customer-facing display, since this is the exact
+// gram amount Miragold owes across every wallet (sir zul, 17/9).
+export const GRAM_LIABILITY_DECIMALS = 4;
+
+/** Adds thousands separators to a fixed-decimal numeric string, e.g. "2382.5721" -> "2,382.5721". */
+export function formatWithThousands(value: string): string {
+  const [intPart, fracPart] = value.split(".");
+  const negative = intPart.startsWith("-");
+  const digits = negative ? intPart.slice(1) : intPart;
+  const grouped = digits.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  const sign = negative ? "-" : "";
+  return fracPart ? `${sign}${grouped}.${fracPart}` : `${sign}${grouped}`;
+}
 
 export function toDecimal(value: string | number | Decimal): Decimal {
   return new Decimal(value);

@@ -67,7 +67,7 @@ export default function CheckoutPage() {
     return () => clearInterval(id);
   }, [lockedOrder]);
 
-  const gram = price ? (amount / Number(price.sellPrice916)).toFixed(4) : "-";
+  const gram = price ? (amount / Number(price.sellPrice916)).toFixed(2) : "-";
 
   async function createLock() {
     setError(null);

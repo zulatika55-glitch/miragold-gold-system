@@ -158,6 +158,10 @@ export const orders = pgTable(
     goldPriceId: uuid("gold_price_id").references(() => goldPrices.id),
     status: orderStatusEnum("status").notNull().default("PENDING"),
     lockExpiresAt: timestamp("lock_expires_at", { withTimezone: true }).notNull(),
+    // Billplz hosted payment page for this order, saved at creation so a
+    // customer who navigated away can resume payment ("Teruskan Pembayaran")
+    // from their transaction history while the price lock is still valid.
+    billplzUrl: varchar("billplz_url", { length: 512 }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

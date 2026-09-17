@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { formatWithThousands } from "@/lib/decimal";
 
 type Stats = {
   totalCustomers: number;
@@ -71,11 +72,21 @@ export default function AdminDashboardPage() {
 
       {error && <p className="mt-4 text-red-600">{error}</p>}
 
+      <div className="mt-8 rounded-2xl border border-amber-900/15 bg-gradient-to-br from-amber-50 to-white p-6">
+        <p className="text-xs font-medium uppercase tracking-widest text-amber-800">Total Gold Wallet Liability</p>
+        <p className="mt-2 text-3xl font-bold tabular-nums text-zinc-900 sm:text-4xl">
+          {stats ? formatWithThousands(stats.totalGramInCirculation) : "—"} g
+        </p>
+        <p className="mt-2 max-w-xl text-sm text-zinc-500">
+          Jumlah gram emas semua customer digabungkan (baki wallet setiap customer dijumlahkan) — ini jumlah gram
+          emas yang Miragold berhutang kepada semua pemegang Gold Wallet.
+        </p>
+      </div>
+
       <p className="mt-8 text-xs font-medium uppercase tracking-widest text-zinc-400">Ringkasan</p>
       <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
         <StatCard icon="👥" label="Jumlah Customer" value={stats?.totalCustomers ?? "—"} />
         <StatCard icon="🧑‍💼" label="Staff / Admin" value={stats?.totalStaff ?? "—"} />
-        <StatCard icon="⚖️" label="Gram Beredar" value={stats ? `${stats.totalGramInCirculation} g` : "—"} />
         <StatCard icon="🧾" label="Order Hari Ini" value={stats?.ordersToday ?? "—"} />
         <StatCard
           icon="⏳"

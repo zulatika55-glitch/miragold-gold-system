@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { users, walletLedger, pendingAllocations, goldPrices, orders } from "@/db/schema";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { getCurrentUser, isAdminOrAbove } from "@/lib/auth";
-import { Decimal, formatGram, formatRm } from "@/lib/decimal";
+import { Decimal, GRAM_LIABILITY_DECIMALS, formatGram, formatRm } from "@/lib/decimal";
 
 // Small set of numbers for the admin dashboard hub — not meant to replace a
 // full reporting module (spec's later Sankyu/reconciliation phase), just
@@ -44,7 +44,11 @@ export async function GET() {
   return NextResponse.json({
     totalCustomers: customerCount.n,
     totalStaff: staffCount.n,
-    totalGramInCirculation: formatGram(totalGram),
+    // Total Gold Wallet Liability (spec: sum of every customer's ledger =
+    // exact gram Miragold owes across all wallets). Kept at higher
+    // precision than the 2dp customer-facing display since this figure is
+    // used for reconciliation (sir zul, 17/9).
+    totalGramInCirculation: formatGram(totalGram, GRAM_LIABILITY_DECIMALS),
     pendingAllocations: pendingCount.n,
     ordersToday: ordersToday.n,
     currentPrice: latestPrice

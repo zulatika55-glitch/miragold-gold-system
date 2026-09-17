@@ -10,6 +10,7 @@ export async function GET() {
       customerId: user.customerId,
       name: user.name,
       phone: user.phone,
+      email: user.email,
       role: user.role,
       status: user.status,
     },

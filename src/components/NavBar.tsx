@@ -3,20 +3,32 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-type Me = { customerId: string; name: string; phone: string; role: string } | null;
+type Me = { customerId: string; name: string; phone: string; email: string | null; role: string } | null;
 
 export default function NavBar() {
   const router = useRouter();
   const [me, setMe] = useState<Me>(null);
   const [loading, setLoading] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetch("/api/auth/me")
       .then((r) => r.json())
       .then((d) => setMe(d.user))
       .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
   }, []);
 
   async function logout() {
@@ -28,7 +40,7 @@ export default function NavBar() {
   return (
     <header className="sticky top-0 z-10 border-b border-amber-900/10 bg-white/95 backdrop-blur">
       <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-        <Link href="/" className="flex items-center">
+        <Link href={me ? "/wallet" : "/"} className="flex items-center gap-3">
           <Image
             src="/miragold-logo.png"
             alt="Miragold"
@@ -37,22 +49,73 @@ export default function NavBar() {
             priority
             className="h-8 w-auto sm:h-9"
           />
+          {!loading && me && (
+            <>
+              <span className="hidden h-5 w-px bg-zinc-200 sm:block" />
+              <span className="hidden text-sm font-medium text-zinc-500 sm:block">Gold Wallet</span>
+            </>
+          )}
         </Link>
         <nav className="flex items-center gap-4 text-sm">
           {!loading && me && (
             <>
-              <Link href="/wallet" className="text-zinc-700 hover:text-amber-900">
-                Gold Wallet
-              </Link>
               {["ADMIN", "OWNER"].includes(me.role) && (
                 <Link href="/admin" className="text-zinc-700 hover:text-amber-900">
                   Panel Admin
                 </Link>
               )}
-              <span className="hidden text-zinc-400 sm:inline">{me.name}</span>
-              <button onClick={logout} className="text-zinc-500 hover:text-amber-900">
-                Log out
-              </button>
+
+              <div className="relative" ref={menuRef}>
+                <button
+                  onClick={() => setMenuOpen((v) => !v)}
+                  className="flex items-center gap-1.5 rounded-full border border-zinc-200 py-1.5 pl-3 pr-2.5 text-zinc-700 transition hover:border-amber-900/30 hover:text-amber-900"
+                >
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-900/10 text-[10px] font-semibold text-amber-900">
+                    {me.name.trim().charAt(0).toUpperCase()}
+                  </span>
+                  Akaun Saya
+                  <svg
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    className={`h-3.5 w-3.5 text-zinc-400 transition-transform ${menuOpen ? "rotate-180" : ""}`}
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </button>
+
+                {menuOpen && (
+                  <div className="absolute right-0 mt-2 w-56 overflow-hidden rounded-2xl border border-zinc-200 bg-white py-1.5 shadow-lg shadow-zinc-900/5">
+                    <div className="border-b border-zinc-100 px-4 py-2.5">
+                      <p className="truncate text-sm font-medium text-zinc-900">{me.name}</p>
+                      <p className="text-xs text-zinc-400">{me.customerId}</p>
+                    </div>
+                    <Link
+                      href="/account"
+                      onClick={() => setMenuOpen(false)}
+                      className="block px-4 py-2 text-sm text-zinc-700 hover:bg-amber-50 hover:text-amber-900"
+                    >
+                      Profil Saya
+                    </Link>
+                    <Link
+                      href="/account/security"
+                      onClick={() => setMenuOpen(false)}
+                      className="block px-4 py-2 text-sm text-zinc-700 hover:bg-amber-50 hover:text-amber-900"
+                    >
+                      Keselamatan Akaun
+                    </Link>
+                    <button
+                      onClick={logout}
+                      className="block w-full border-t border-zinc-100 px-4 py-2 text-left text-sm text-zinc-500 hover:bg-amber-50 hover:text-amber-900"
+                    >
+                      Log Keluar
+                    </button>
+                  </div>
+                )}
+              </div>
             </>
           )}
           {!loading && !me && (

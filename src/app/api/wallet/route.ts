@@ -26,7 +26,7 @@ export async function GET() {
     balanceGram: formatGram(balance),
     // Displayed explicitly as an estimate, never a fixed cash balance
     // (spec 7.2: "Paparkan anggaran nilai semasa secara jelas").
-    note: "RM value is an estimate based on the current price, not a fixed cash balance.",
+    note: "Nilai RM adalah anggaran berdasarkan harga emas semasa, bukan baki tunai tetap.",
     history: history.map((h) => ({
       ledgerRef: h.ledgerRef,
       type: h.type,

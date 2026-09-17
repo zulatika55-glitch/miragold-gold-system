@@ -6,6 +6,17 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 type Mode = "login" | "signup";
 
+// A server or platform-level error (timeout, proxy 502, etc.) can return an
+// empty/HTML body instead of JSON — never let that crash the UI with
+// "Unexpected end of JSON input"; fall back to a generic message instead.
+async function safeJson(res: Response): Promise<Record<string, unknown>> {
+  try {
+    return await res.json();
+  } catch {
+    return { error: `Server ralat (${res.status}). Sila cuba lagi.` };
+  }
+}
+
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -39,7 +50,7 @@ function LoginForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone, ...(mode === "signup" ? { email } : {}) }),
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok) {
         const message = typeof data.error === "string" ? data.error : JSON.stringify(data.error);
         // A "Log Masuk" attempt on a number that was never registered —
@@ -72,7 +83,7 @@ function LoginForm() {
           ...(mode === "signup" || needsName ? { name, email } : {}),
         }),
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok) {
         if (res.status === 422) {
           setNeedsName(true);

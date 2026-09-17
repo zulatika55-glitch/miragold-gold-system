@@ -167,20 +167,20 @@ function WalletContent() {
       {wallet && (
         <>
           <div className="mt-4 rounded-2xl border border-amber-900/10 bg-white p-6">
-            <p className="text-sm text-zinc-500">Total Balance (g)</p>
+            <p className="text-sm text-zinc-500">Baki Emas Anda</p>
             <p className="text-3xl font-bold text-amber-900">{wallet.balanceGram} g</p>
             <p className="mt-1 text-xs text-zinc-400">{wallet.note}</p>
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2">
             <Link href="/checkout" className="rounded-full bg-amber-900 px-4 py-2 text-sm font-medium text-white">
-              Simpan Lagi
+              Beli Emas 916
             </Link>
             <button disabled className="rounded-full border border-zinc-200 px-4 py-2 text-sm text-zinc-400">
-              Tebus 916 (coming soon)
+              Tebus Emas (coming soon)
             </button>
             <button disabled className="rounded-full border border-zinc-200 px-4 py-2 text-sm text-zinc-400">
-              Jual Balik (coming soon)
+              Jual Emas (coming soon)
             </button>
           </div>
 
@@ -228,8 +228,8 @@ function WalletContent() {
             </table>
           </div>
 
-          <h2 className="mt-8 text-lg font-medium text-zinc-900">Pergerakan Wallet (Ledger)</h2>
-          <p className="text-xs text-zinc-400">Setiap gram masuk/keluar direkod di sini — audit trail penuh.</p>
+          <h2 className="mt-8 text-lg font-medium text-zinc-900">Rekod Pergerakan Emas</h2>
+          <p className="text-xs text-zinc-400">Setiap gram masuk dan keluar direkod di sini secara terperinci.</p>
           <div className="mt-2 overflow-x-auto rounded-lg border border-zinc-200 bg-white">
             <table className="w-full text-left text-sm">
               <thead className="bg-zinc-50 text-zinc-500">

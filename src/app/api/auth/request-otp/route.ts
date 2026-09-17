@@ -43,7 +43,25 @@ export async function POST(req: Request) {
     );
   }
 
-  const { expiresAt } = await requestOtp(phone, email);
+  try {
+    const { expiresAt } = await requestOtp(phone, email);
+    return NextResponse.json({ ok: true, expiresAt });
+  } catch (err) {
+    // Never let an OTP-delivery failure crash into an empty/HTML 500 —
+    // the client always expects JSON back here. Log the real cause
+    // server-side (e.g. Resend sandbox-mode rejection) and surface a
+    // friendly, actionable message to the customer.
+    console.error("[request-otp] failed to send OTP:", err);
+    const detail = err instanceof Error ? err.message : String(err);
+    const isResendSandboxLimit = detail.includes("You can only send testing emails to your own email address");
 
-  return NextResponse.json({ ok: true, expiresAt });
+    return NextResponse.json(
+      {
+        error: isResendSandboxLimit
+          ? "Sistem emel OTP masih dalam mod ujian dan belum boleh hantar ke email pelanggan lain. Sila hubungi Miragold."
+          : "Kod OTP tidak dapat dihantar buat masa ini. Sila cuba lagi sebentar.",
+      },
+      { status: 502 },
+    );
+  }
 }

@@ -7,12 +7,16 @@ import { useEffect, useRef, useState } from "react";
 
 type Me = { customerId: string; name: string; phone: string; email: string | null; role: string } | null;
 
+const CATALOG_URL = "https://miragold.my";
+
 export default function NavBar() {
   const router = useRouter();
   const [me, setMe] = useState<Me>(null);
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const mobileRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -25,6 +29,9 @@ export default function NavBar() {
     function onClickOutside(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setMenuOpen(false);
+      }
+      if (mobileRef.current && !mobileRef.current.contains(e.target as Node)) {
+        setMobileOpen(false);
       }
     }
     document.addEventListener("mousedown", onClickOutside);
@@ -56,9 +63,14 @@ export default function NavBar() {
             </>
           )}
         </Link>
-        <nav className="flex items-center gap-4 text-sm">
+
+        {/* Desktop nav */}
+        <nav className="hidden items-center gap-5 text-sm sm:flex">
           {!loading && me && (
             <>
+              <a href={CATALOG_URL} className="text-zinc-700 hover:text-amber-900">
+                Katalog Barang Kemas
+              </a>
               {["ADMIN", "OWNER"].includes(me.role) && (
                 <Link href="/admin" className="text-zinc-700 hover:text-amber-900">
                   Panel Admin
@@ -119,11 +131,97 @@ export default function NavBar() {
             </>
           )}
           {!loading && !me && (
-            <Link href="/login" className="rounded-full bg-amber-900 px-4 py-1.5 text-white hover:bg-amber-800">
-              Login / Register
-            </Link>
+            <>
+              <a href={CATALOG_URL} className="text-zinc-700 hover:text-amber-900">
+                Katalog Barang Kemas
+              </a>
+              <Link href="/login" className="rounded-full bg-amber-900 px-4 py-1.5 text-white hover:bg-amber-800">
+                Login / Register
+              </Link>
+            </>
           )}
         </nav>
+
+        {/* Mobile menu */}
+        <div className="sm:hidden" ref={mobileRef}>
+          {!loading && (
+            <div className="relative">
+              <button
+                onClick={() => setMobileOpen((v) => !v)}
+                aria-label="Menu"
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-zinc-200 text-zinc-700 hover:border-amber-900/30 hover:text-amber-900"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-5 w-5">
+                  {mobileOpen ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 6l12 12M18 6L6 18" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M4 12h16M4 17h16" />
+                  )}
+                </svg>
+              </button>
+
+              {mobileOpen && (
+                <div className="absolute right-0 mt-2 w-64 overflow-hidden rounded-2xl border border-zinc-200 bg-white py-1.5 shadow-lg shadow-zinc-900/5">
+                  <a
+                    href={CATALOG_URL}
+                    onClick={() => setMobileOpen(false)}
+                    className="block px-4 py-2.5 text-sm text-zinc-700 hover:bg-amber-50 hover:text-amber-900"
+                  >
+                    Katalog Barang Kemas
+                  </a>
+
+                  {me && (
+                    <>
+                      {["ADMIN", "OWNER"].includes(me.role) && (
+                        <Link
+                          href="/admin"
+                          onClick={() => setMobileOpen(false)}
+                          className="block border-t border-zinc-100 px-4 py-2.5 text-sm text-zinc-700 hover:bg-amber-50 hover:text-amber-900"
+                        >
+                          Panel Admin
+                        </Link>
+                      )}
+                      <div className="border-t border-zinc-100 px-4 py-2.5">
+                        <p className="truncate text-sm font-medium text-zinc-900">{me.name}</p>
+                        <p className="text-xs text-zinc-400">{me.customerId}</p>
+                      </div>
+                      <Link
+                        href="/account"
+                        onClick={() => setMobileOpen(false)}
+                        className="block px-4 py-2.5 text-sm text-zinc-700 hover:bg-amber-50 hover:text-amber-900"
+                      >
+                        Profil Saya
+                      </Link>
+                      <Link
+                        href="/account/security"
+                        onClick={() => setMobileOpen(false)}
+                        className="block px-4 py-2.5 text-sm text-zinc-700 hover:bg-amber-50 hover:text-amber-900"
+                      >
+                        Keselamatan Akaun
+                      </Link>
+                      <button
+                        onClick={logout}
+                        className="block w-full border-t border-zinc-100 px-4 py-2.5 text-left text-sm text-zinc-500 hover:bg-amber-50 hover:text-amber-900"
+                      >
+                        Log Keluar
+                      </button>
+                    </>
+                  )}
+
+                  {!me && (
+                    <Link
+                      href="/login"
+                      onClick={() => setMobileOpen(false)}
+                      className="block border-t border-zinc-100 px-4 py-2.5 text-sm font-medium text-amber-900 hover:bg-amber-50"
+                    >
+                      Login / Register
+                    </Link>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );

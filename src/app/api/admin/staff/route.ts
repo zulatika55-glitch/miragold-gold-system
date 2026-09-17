@@ -2,10 +2,11 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
 import { users } from "@/db/schema";
-import { desc, eq, ilike, or } from "drizzle-orm";
+import { desc, ilike, inArray, or } from "drizzle-orm";
 import { getCurrentUser, isAdminOrAbove } from "@/lib/auth";
 import { newCustomerId } from "@/lib/refs";
 import { writeAuditLog } from "@/lib/audit";
+import { normalizeMyPhone, phoneLookupCandidates } from "@/lib/phone";
 
 // Staff are just `users` rows tagged with a STAFF+ role (spec 5.1: "internal
 // STAFF/PILOT tag ... never a separate employee login"). This page lets an
@@ -75,14 +76,19 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const { name, phone, email, role } = parsed.data;
+  const { name, email, role } = parsed.data;
+  const phone = normalizeMyPhone(parsed.data.phone);
 
   // Only OWNER can grant ADMIN — a plain ADMIN cannot mint more admins.
   if (role === "ADMIN" && actor.role !== "OWNER") {
     return NextResponse.json({ error: "Only an OWNER can assign the ADMIN role" }, { status: 403 });
   }
 
-  const [existing] = await db.select().from(users).where(eq(users.phone, phone)).limit(1);
+  const [existing] = await db
+    .select()
+    .from(users)
+    .where(inArray(users.phone, phoneLookupCandidates(parsed.data.phone)))
+    .limit(1);
   if (existing) {
     return NextResponse.json({ error: "A user with this phone number already exists" }, { status: 409 });
   }

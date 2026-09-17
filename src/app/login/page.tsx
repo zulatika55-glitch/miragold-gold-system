@@ -4,19 +4,31 @@ import { Suspense, useState } from "react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 
+type Mode = "login" | "signup";
+
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const nextPath = searchParams.get("next") ?? "/wallet";
 
+  const [mode, setMode] = useState<Mode>("login");
   const [step, setStep] = useState<"phone" | "otp">("phone");
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [needsName, setNeedsName] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [devHint, setDevHint] = useState<string | null>(null);
+
+  function switchMode(next: Mode) {
+    setMode(next);
+    setStep("phone");
+    setCode("");
+    setError(null);
+    setNeedsName(false);
+  }
 
   async function requestOtp() {
     setError(null);
@@ -25,10 +37,19 @@ function LoginForm() {
       const res = await fetch("/api/auth/request-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone }),
+        body: JSON.stringify({ phone, ...(mode === "signup" ? { email } : {}) }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(JSON.stringify(data.error ?? data));
+      if (!res.ok) {
+        const message = typeof data.error === "string" ? data.error : JSON.stringify(data.error);
+        // A "Log Masuk" attempt on a number that was never registered —
+        // point them at Sign Up instead of a confusing raw error.
+        if (res.status === 422 && mode === "login" && message.includes("Daftar Akaun Baharu")) {
+          setError(message);
+          return;
+        }
+        throw new Error(message);
+      }
       setStep("otp");
       setDevHint("Mod pembangunan: semak log server untuk kod OTP (OTP_PROVIDER=mock).");
     } catch (e) {
@@ -45,13 +66,21 @@ function LoginForm() {
       const res = await fetch("/api/auth/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, code, ...(needsName ? { name } : {}) }),
+        body: JSON.stringify({
+          phone,
+          code,
+          ...(mode === "signup" || needsName ? { name, email } : {}),
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
         if (res.status === 422) {
           setNeedsName(true);
-          setError("Nombor baharu — sila masukkan nama untuk daftar.");
+          setError(
+            typeof data.message === "string"
+              ? data.message
+              : "Nombor baharu — sila masukkan nama dan email untuk daftar.",
+          );
           return;
         }
         throw new Error(typeof data.error === "string" ? data.error : JSON.stringify(data.error));
@@ -63,6 +92,9 @@ function LoginForm() {
       setBusy(false);
     }
   }
+
+  const isSignup = mode === "signup" || needsName;
+  const canRequestOtp = phone.length >= 8 && (!isSignup || (name.trim().length > 0 && email.trim().length > 0));
 
   return (
     <main className="relative mx-auto flex w-full max-w-6xl flex-1 items-center overflow-hidden px-6 py-12">
@@ -106,17 +138,58 @@ function LoginForm() {
           <div className="relative mt-8 overflow-hidden rounded-3xl border border-amber-900/10 bg-white/80 p-8 shadow-[0_8px_40px_-12px_rgba(120,53,15,0.15)] backdrop-blur lg:mt-0">
             <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-amber-600 via-amber-400 to-yellow-500" />
 
-            <h1 className="text-2xl font-semibold text-zinc-900">Log Masuk / Daftar</h1>
-            <p className="mt-1 text-sm text-zinc-500">Guna nombor telefon dan kod OTP.</p>
+            {/* Login / Sign up toggle */}
+            <div className="flex rounded-full border border-zinc-200 bg-zinc-50 p-1 text-sm font-medium">
+              <button
+                onClick={() => switchMode("login")}
+                disabled={step === "otp"}
+                className={`flex-1 rounded-full py-1.5 transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                  mode === "login" ? "bg-amber-900 text-white shadow-sm" : "text-zinc-500 hover:text-zinc-800"
+                }`}
+              >
+                Log Masuk
+              </button>
+              <button
+                onClick={() => switchMode("signup")}
+                disabled={step === "otp"}
+                className={`flex-1 rounded-full py-1.5 transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                  mode === "signup" ? "bg-amber-900 text-white shadow-sm" : "text-zinc-500 hover:text-zinc-800"
+                }`}
+              >
+                Daftar Akaun Baharu
+              </button>
+            </div>
+
+            <h1 className="mt-5 text-2xl font-semibold text-zinc-900">
+              {mode === "login" ? "Log Masuk" : "Daftar Akaun Baharu"}
+            </h1>
+            <p className="mt-1 text-sm text-zinc-500">
+              {mode === "login"
+                ? "Guna nombor telefon dan kod OTP."
+                : "Isikan maklumat anda — kod OTP akan dihantar ke email anda."}
+            </p>
 
             {/* step indicator */}
             <div className="mt-6 flex items-center gap-2 text-xs font-medium">
-              <StepPill active={step === "phone"} done={step === "otp"} label="1" text="Nombor telefon" />
+              <StepPill active={step === "phone"} done={step === "otp"} label="1" text="Maklumat" />
               <span className="h-px flex-1 bg-zinc-200" />
               <StepPill active={step === "otp"} done={false} label="2" text="Kod OTP" />
             </div>
 
             <div className="mt-6 flex flex-col gap-3">
+              {isSignup && step === "phone" && (
+                <label className="text-sm font-medium text-zinc-700">
+                  Nama penuh
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Nama seperti dalam IC"
+                    className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2.5 outline-none transition focus:border-amber-700 focus:ring-2 focus:ring-amber-700/20"
+                  />
+                </label>
+              )}
+
               <label className="text-sm font-medium text-zinc-700">
                 Nombor telefon
                 <div className="relative mt-1">
@@ -126,16 +199,31 @@ function LoginForm() {
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     disabled={step === "otp"}
-                    placeholder="+60123456789"
+                    placeholder="0123456789"
                     className="w-full rounded-xl border border-zinc-300 bg-white py-2.5 pl-9 pr-3 outline-none transition focus:border-amber-700 focus:ring-2 focus:ring-amber-700/20 disabled:bg-zinc-100 disabled:text-zinc-500"
                   />
                 </div>
+                <span className="mt-1 block text-xs text-zinc-400">Contoh: 0123456789 — tak perlu tulis +60.</span>
               </label>
+
+              {isSignup && step === "phone" && (
+                <label className="text-sm font-medium text-zinc-700">
+                  Email
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="nama@email.com"
+                    className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2.5 outline-none transition focus:border-amber-700 focus:ring-2 focus:ring-amber-700/20"
+                  />
+                  <span className="mt-1 block text-xs text-zinc-400">Kod OTP akan dihantar ke email ini.</span>
+                </label>
+              )}
 
               {step === "phone" && (
                 <button
                   onClick={requestOtp}
-                  disabled={busy || phone.length < 8}
+                  disabled={busy || !canRequestOtp}
                   className="group relative mt-2 overflow-hidden rounded-full bg-gradient-to-r from-amber-800 to-amber-950 px-4 py-2.5 font-medium text-white shadow-lg shadow-amber-900/20 transition hover:from-amber-700 hover:to-amber-900 disabled:opacity-50 disabled:shadow-none"
                 >
                   {!busy && <span className="shimmer-sweep" />}
@@ -163,21 +251,32 @@ function LoginForm() {
                     />
                   </label>
 
-                  {needsName && (
-                    <label className="text-sm font-medium text-zinc-700">
-                      Nama penuh
-                      <input
-                        type="text"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2.5 outline-none transition focus:border-amber-700 focus:ring-2 focus:ring-amber-700/20"
-                      />
-                    </label>
+                  {needsName && mode === "login" && (
+                    <div className="flex flex-col gap-3 rounded-lg border border-amber-900/10 bg-amber-50/60 p-3">
+                      <label className="text-sm font-medium text-zinc-700">
+                        Nama penuh
+                        <input
+                          type="text"
+                          value={name}
+                          onChange={(e) => setName(e.target.value)}
+                          className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2.5 outline-none transition focus:border-amber-700 focus:ring-2 focus:ring-amber-700/20"
+                        />
+                      </label>
+                      <label className="text-sm font-medium text-zinc-700">
+                        Email
+                        <input
+                          type="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          className="mt-1 w-full rounded-xl border border-zinc-300 px-3 py-2.5 outline-none transition focus:border-amber-700 focus:ring-2 focus:ring-amber-700/20"
+                        />
+                      </label>
+                    </div>
                   )}
 
                   <button
                     onClick={verify}
-                    disabled={busy || code.length !== 6 || (needsName && !name)}
+                    disabled={busy || code.length !== 6 || (needsName && (!name || !email))}
                     className="group relative mt-2 overflow-hidden rounded-full bg-gradient-to-r from-amber-800 to-amber-950 px-4 py-2.5 font-medium text-white shadow-lg shadow-amber-900/20 transition hover:from-amber-700 hover:to-amber-900 disabled:opacity-50 disabled:shadow-none"
                   >
                     {!busy && <span className="shimmer-sweep" />}
@@ -192,7 +291,7 @@ function LoginForm() {
                     }}
                     className="text-center text-xs text-zinc-400 hover:text-amber-800 hover:underline"
                   >
-                    Tukar nombor telefon
+                    Kembali
                   </button>
                 </>
               )}

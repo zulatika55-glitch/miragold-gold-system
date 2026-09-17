@@ -105,6 +105,18 @@ export default function AdminDashboardPage() {
           title="Urus Staff / Pilot"
           description="Tambah akaun staff, tag akaun sedia ada, tukar peranan atau status."
         />
+        <AdminCard
+          href="/admin/orders"
+          icon="🧾"
+          title="Semua Transaksi"
+          description="Semak setiap transaksi customer: RM, harga lock, gram, rujukan Billplz, status bayaran & wallet."
+        />
+        <AdminCard
+          href="/admin/adjustments"
+          icon="⚖️"
+          title="Adjustment Wallet"
+          description="Betulkan baki gram customer secara terkawal — mandatori sebab & direkod dalam audit trail."
+        />
       </div>
     </main>
   );

@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
-import { goldPrices, orders } from "@/db/schema";
-import { desc, eq } from "drizzle-orm";
+import { goldPrices, orders, payments } from "@/db/schema";
+import { desc, eq, inArray } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
-import { calcGramFromAmount, toDecimal } from "@/lib/decimal";
+import { calcGramFromAmount, formatGram, formatRm, toDecimal } from "@/lib/decimal";
 import { newOrderRef } from "@/lib/refs";
 import { createBill } from "@/lib/billplz";
 import { writeAuditLog } from "@/lib/audit";
@@ -14,6 +14,44 @@ const bodySchema = z.object({
 });
 
 const MINIMUM_RM = 100;
+
+// Module 03/06 — the customer's own Lock/Buy order history, spec 6.6:
+// every attempt (not just successful ones) so a failed/expired order is
+// still visible, not silently dropped from what the customer sees.
+export async function GET() {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "Login required" }, { status: 401 });
+
+  const rows = await db
+    .select()
+    .from(orders)
+    .where(eq(orders.customerId, user.id))
+    .orderBy(desc(orders.createdAt))
+    .limit(100);
+
+  const orderIds = rows.map((o) => o.id);
+  const paymentRows = orderIds.length
+    ? await db.select().from(payments).where(inArray(payments.orderId, orderIds))
+    : [];
+  const paymentByOrderId = new Map(paymentRows.map((p) => [p.orderId, p]));
+
+  return NextResponse.json({
+    orders: rows.map((o) => {
+      const payment = paymentByOrderId.get(o.id);
+      return {
+        orderRef: o.orderRef,
+        createdAt: o.createdAt,
+        amountRm: formatRm(o.amountRm),
+        priceSnapshot: formatRm(o.priceSnapshot),
+        gram: formatGram(o.gram),
+        status: o.status,
+        lockExpiresAt: o.lockExpiresAt,
+        billplzBillId: payment?.providerBillId ?? null,
+        paymentStatus: payment?.status ?? "PENDING",
+      };
+    }),
+  });
+}
 
 // Module 03 — Lock / Buy Emas 916.
 // Flow (spec 6.2 table): amount -> price snapshot -> gram -> review ->

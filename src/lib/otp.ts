@@ -1,7 +1,8 @@
 import crypto from "crypto";
 import { db } from "@/db";
 import { otpCodes, users } from "@/db/schema";
-import { and, desc, eq, gt, isNull } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull } from "drizzle-orm";
+import { normalizeMyPhone, phoneLookupCandidates } from "./phone";
 
 /**
  * OTP delivery is behind this single interface so a real SMS provider
@@ -90,15 +91,28 @@ async function sendOtp(phone: string, code: string, email: string | null): Promi
   throw new Error(`Unknown OTP_PROVIDER: ${provider}`);
 }
 
-export async function requestOtp(phone: string): Promise<{ expiresAt: Date }> {
+export async function requestOtp(
+  rawPhone: string,
+  signupEmail?: string | null,
+): Promise<{ expiresAt: Date }> {
+  const phone = normalizeMyPhone(rawPhone);
   const code = generateCode();
   const codeHash = hashCode(code);
   const expiresAt = new Date(Date.now() + OTP_TTL_MINUTES * 60_000);
 
   // Look up an existing account so a real email/SMS provider knows where to
-  // deliver the code. New (not-yet-registered) numbers have no row yet —
-  // sendOtp() decides how to handle that per-provider.
-  const [existing] = await db.select().from(users).where(eq(users.phone, phone)).limit(1);
+  // deliver the code. Older accounts may have been stored before phone
+  // numbers were normalized, so check every representation.
+  const [existing] = await db
+    .select()
+    .from(users)
+    .where(inArray(users.phone, phoneLookupCandidates(rawPhone)))
+    .limit(1);
+
+  // New (not-yet-registered) numbers have no row/email yet — the sign-up
+  // form is expected to supply one so the very first OTP has somewhere to
+  // go. sendOtp() still throws its own clear error if neither is present.
+  const emailForOtp = existing?.email ?? signupEmail ?? null;
 
   await db.insert(otpCodes).values({
     phone,
@@ -106,7 +120,7 @@ export async function requestOtp(phone: string): Promise<{ expiresAt: Date }> {
     expiresAt,
   });
 
-  await sendOtp(phone, code, existing?.email ?? null);
+  await sendOtp(phone, code, emailForOtp);
 
   return { expiresAt };
 }

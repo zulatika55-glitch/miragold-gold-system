@@ -45,7 +45,7 @@ export default function NavBar() {
   }
 
   return (
-    <header className="sticky top-0 z-10 border-b border-amber-900/10 bg-white/95 backdrop-blur">
+    <header className="sticky top-0 z-40 border-b border-amber-900/10 bg-white/95 backdrop-blur">
       <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
         <div className="flex items-center gap-4">
           <Link href={me ? "/wallet" : "/"} className="flex items-center gap-3">

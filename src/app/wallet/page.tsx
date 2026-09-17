@@ -155,7 +155,7 @@ function downloadReceipt(order: OrderRow) {
 function ReceiptModal({ order, onClose }: { order: OrderRow; onClose: () => void }) {
   return (
     <div
-      className="fixed inset-0 z-20 flex items-center justify-center bg-zinc-900/40 px-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 px-4"
       onClick={onClose}
       role="dialog"
       aria-modal="true"

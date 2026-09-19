@@ -25,7 +25,14 @@ import { toDecimal, formatRm } from "@/lib/decimal";
 const SOURCE_URL = process.env.MIRAGOLD_PRICE_SYNC_URL ?? "https://miragold.my/daily_price_state.json";
 const SELL_FIELD = process.env.PRICE_SYNC_SELL_FIELD ?? "price_member";
 const BUYBACK_FIELD = process.env.PRICE_SYNC_BUYBACK_FIELD ?? "price_selling";
-const INTERVAL_MINUTES = Number(process.env.PRICE_SYNC_INTERVAL_MINUTES ?? "5");
+// Kept short on purpose (sir zul, 19/9): this is real money — if the market
+// price rises on miragold.my while our own price is still stale, a customer
+// can lock a Buy order at the old, cheaper price during that gap and
+// Miragold eats the difference. A 5-minute gap on top of the 10-minute
+// price-lock window meant up to ~15 minutes of stale-price exposure; a
+// 30-second check keeps that add-on exposure to well under a minute. The
+// fetch itself is a tiny JSON file, so checking this often is cheap.
+const INTERVAL_SECONDS = Number(process.env.PRICE_SYNC_INTERVAL_SECONDS ?? "30");
 // Same 10% guard as the manual admin price form (Loophole 16.6) — a typo or
 // a bad value on the website's side must never silently blow past this.
 const WARN_THRESHOLD = 0.1;
@@ -148,10 +155,12 @@ export function startPriceSyncScheduler(): void {
   if (started) return;
   started = true;
 
-  const intervalMs = Math.max(1, INTERVAL_MINUTES) * 60_000;
-  console.log(`[priceSync] Auto price sync enabled — checking ${SOURCE_URL} every ${INTERVAL_MINUTES} minute(s).`);
+  // Floor at 10s — fast enough to close the stale-price gap, not so fast it
+  // hammers miragold.my for no reason.
+  const intervalMs = Math.max(10, INTERVAL_SECONDS) * 1000;
+  console.log(`[priceSync] Auto price sync enabled — checking ${SOURCE_URL} every ${INTERVAL_SECONDS} second(s).`);
 
   // Run once shortly after boot, then on the regular interval.
-  setTimeout(() => void runPriceSync(), 5_000);
+  setTimeout(() => void runPriceSync(), 3_000);
   setInterval(() => void runPriceSync(), intervalMs);
 }

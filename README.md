@@ -61,7 +61,7 @@ Open http://localhost:3000.
 | `APP_BASE_URL` | Public URL Billplz redirects/callbacks to (use an ngrok-style tunnel URL for local testing since Billplz needs to reach your webhook) |
 | `PRICE_LOCK_MINUTES` | Price-lock window for checkout, spec suggests 10 |
 | `MIRAGOLD_PRICE_SYNC_URL` | Auto price-sync source, default `https://miragold.my/daily_price_state.json` — the shop's own website already exposes today's rates here (sir zul, 19/9) |
-| `PRICE_SYNC_INTERVAL_MINUTES` | How often to check the source above, default `5` |
+| `PRICE_SYNC_INTERVAL_SECONDS` | How often to check the source above, default `30` — kept short since a price-lock order created during a stale gap locks in the old price (sir zul, 19/9) |
 | `PRICE_SYNC_SELL_FIELD` | Which JSON field becomes "Harga Jual", default `price_member` |
 | `PRICE_SYNC_BUYBACK_FIELD` | Which JSON field becomes "Harga Beli Balik", default `price_selling` — if the shop's field meanings ever change, remap here instead of touching code |
 

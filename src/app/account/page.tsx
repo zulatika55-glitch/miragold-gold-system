@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -23,6 +23,19 @@ const ROLE_LABEL: Record<string, string> = {
 
 function toLocalDisplay(phone: string): string {
   return phone.startsWith("+60") ? `0${phone.slice(3)}` : phone;
+}
+
+// Same verified check used in the NavBar's "Akaun Saya" menu (sir zul, 19/9).
+function VerifiedBadge() {
+  return (
+    <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5 shrink-0 text-emerald-500" aria-label="Akaun disahkan">
+      <path
+        fillRule="evenodd"
+        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+        clipRule="evenodd"
+      />
+    </svg>
+  );
 }
 
 export default function AccountPage() {
@@ -59,7 +72,16 @@ export default function AccountPage() {
 
       <div className="mt-6 divide-y divide-zinc-100 rounded-2xl border border-zinc-200 bg-white">
         <Row label="Nama Penuh" value={me.name} />
-        <Row label="Customer ID" value={me.customerId} mono />
+        <Row
+          label="Customer ID"
+          value={
+            <span className="inline-flex items-center gap-1">
+              {me.customerId}
+              {me.status === "ACTIVE" && <VerifiedBadge />}
+            </span>
+          }
+          mono
+        />
         <Row label="Nombor Telefon" value={toLocalDisplay(me.phone)} />
         <Row label="Email" value={me.email ?? "—"} />
         {me.role !== "CUSTOMER" && <Row label="Peranan" value={ROLE_LABEL[me.role] ?? me.role} />}
@@ -72,7 +94,7 @@ export default function AccountPage() {
   );
 }
 
-function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function Row({ label, value, mono }: { label: string; value: ReactNode; mono?: boolean }) {
   return (
     <div className="flex items-center justify-between px-5 py-4">
       <span className="text-sm text-zinc-500">{label}</span>

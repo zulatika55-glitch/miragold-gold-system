@@ -5,9 +5,31 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-type Me = { customerId: string; name: string; phone: string; email: string | null; role: string } | null;
+type Me = {
+  customerId: string;
+  name: string;
+  phone: string;
+  email: string | null;
+  role: string;
+  status: string;
+} | null;
 
 const CATALOG_URL = "https://miragold.my";
+
+// Small green check next to the Customer ID — signals a verified/active
+// account, matching the "verified" badge customers recognise from other
+// gold savings apps (sir zul, 19/9).
+function VerifiedBadge() {
+  return (
+    <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5 shrink-0 text-emerald-500" aria-label="Akaun disahkan">
+      <path
+        fillRule="evenodd"
+        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+        clipRule="evenodd"
+      />
+    </svg>
+  );
+}
 
 export default function NavBar() {
   const router = useRouter();
@@ -115,7 +137,10 @@ export default function NavBar() {
                   <div className="absolute right-0 mt-2 w-56 overflow-hidden rounded-2xl border border-zinc-200 bg-white py-1.5 shadow-lg shadow-zinc-900/5">
                     <div className="border-b border-zinc-100 px-4 py-2.5">
                       <p className="truncate text-sm font-medium text-zinc-900">{me.name}</p>
-                      <p className="text-xs text-zinc-400">{me.customerId}</p>
+                      <p className="mt-0.5 flex items-center gap-1 text-xs text-zinc-400">
+                        {me.customerId}
+                        {me.status === "ACTIVE" && <VerifiedBadge />}
+                      </p>
                     </div>
                     <Link
                       href="/account"
@@ -190,7 +215,10 @@ export default function NavBar() {
                       )}
                       <div className="border-t border-zinc-100 px-4 py-2.5">
                         <p className="truncate text-sm font-medium text-zinc-900">{me.name}</p>
-                        <p className="text-xs text-zinc-400">{me.customerId}</p>
+                        <p className="mt-0.5 flex items-center gap-1 text-xs text-zinc-400">
+                          {me.customerId}
+                          {me.status === "ACTIVE" && <VerifiedBadge />}
+                        </p>
                       </div>
                       <Link
                         href="/account"

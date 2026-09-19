@@ -9,6 +9,9 @@ type PriceRow = {
   sellPrice916: string;
   buybackPrice916: string;
   effectiveAt: string;
+  // null = auto-synced from miragold.my; set = a human updated it here
+  // (sir zul, 19/9).
+  createdBy: string | null;
 };
 
 export default function AdminPricePage() {
@@ -114,6 +117,9 @@ export default function AdminPricePage() {
           <p className="text-sm text-zinc-500">
             Harga baharu terpakai serta-merta untuk order akan datang.
           </p>
+          <p className="mt-1 text-xs text-emerald-700">
+            🔄 Auto-sync aktif — harga akan ikut miragold.my automatik. Kemaskini manual di bawah hanya untuk override.
+          </p>
         </div>
       </div>
 
@@ -214,6 +220,7 @@ export default function AdminPricePage() {
                 <th className="px-3 py-2">Tarikh</th>
                 <th className="px-3 py-2">Jual (RM/g)</th>
                 <th className="px-3 py-2">Beli Balik (RM/g)</th>
+                <th className="px-3 py-2">Sumber</th>
               </tr>
             </thead>
             <tbody>
@@ -232,6 +239,15 @@ export default function AdminPricePage() {
                       )}
                     </td>
                     <td className="px-3 py-2">RM{p.buybackPrice916}</td>
+                    <td className="px-3 py-2">
+                      {p.createdBy ? (
+                        <span className="text-zinc-500">Admin</span>
+                      ) : (
+                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                          Auto (miragold.my)
+                        </span>
+                      )}
+                    </td>
                   </tr>
                 );
               })}

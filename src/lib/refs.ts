@@ -27,3 +27,7 @@ export function newLedgerRef(): string {
 export function newCustomerId(): string {
   return `MG-${randomSegment(8)}`;
 }
+
+export function newBuybackRef(): string {
+  return `JB-${datePart()}-${randomSegment(6)}`;
+}

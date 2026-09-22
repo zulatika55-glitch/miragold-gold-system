@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { walletLedger } from "@/db/schema";
 import { desc, eq } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
-import { getWalletBalance } from "@/lib/wallet";
+import { getWalletBalance, getGramOnHold, expireStaleBuybackRequests } from "@/lib/wallet";
 import { formatGram } from "@/lib/decimal";
 
 // Module 04 — Gold Wallet. Balance is always derived from the ledger
@@ -13,7 +13,12 @@ export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Login required" }, { status: 401 });
 
-  const balance = await getWalletBalance(user.id);
+  // Release any abandoned Jual Emas holds first so "Baki Emas Anda" /
+  // Available Gold below is never stale (Fasa 2A spec section 7).
+  await expireStaleBuybackRequests(db, user.id);
+
+  const [balance, onHold] = await Promise.all([getWalletBalance(user.id), getGramOnHold(user.id)]);
+  const available = balance.minus(onHold);
 
   const history = await db
     .select()
@@ -23,7 +28,12 @@ export async function GET() {
     .limit(100);
 
   return NextResponse.json({
-    balanceGram: formatGram(balance),
+    // "Baki Emas Anda" on the dashboard is what the customer can actually
+    // use right now (Fasa 2A spec section 2) — gram already on hold for a
+    // pending Jual Emas request is shown separately, not folded back in.
+    balanceGram: formatGram(available),
+    gramOnHold: formatGram(onHold),
+    totalGram: formatGram(balance),
     // Displayed explicitly as an estimate, never a fixed cash balance
     // (spec 7.2: "Paparkan anggaran nilai semasa secara jelas").
     note: "Nilai RM adalah anggaran berdasarkan harga emas semasa, bukan baki tunai tetap.",

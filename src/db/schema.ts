@@ -82,6 +82,27 @@ export const actorTypeEnum = pgEnum("actor_type", [
   "SYSTEM",
 ]);
 
+// Fasa 2A — Module 06 (Jual Balik Emas / Buyback), spec section 13.
+// "Pending Confirmation" = customer submitted the preview + will confirm via
+// OTP; the gram is already placed on hold at this point (spec section 7 —
+// the hold must exist before OTP so two devices can't race for the same
+// gram). If OTP is never completed, it lazily expires (see
+// expireStaleBuybackRequests in src/lib/wallet.ts) and the hold releases.
+// "Paid" and "Completed" are deliberately separate steps (not merged) so
+// each has its own idempotency guard per spec 19's two distinct rules
+// ("Mark Paid twice" and "Complete twice" must each be safe) — the actual
+// gram deduction only happens at Complete.
+export const buybackStatusEnum = pgEnum("buyback_status", [
+  "PENDING_CONFIRMATION",
+  "ON_HOLD",
+  "PROCESSING",
+  "PAID",
+  "COMPLETED",
+  "REJECTED",
+  "CANCELLED",
+  "EXPIRED",
+]);
+
 // ---------- users ----------
 // spec: users | customer_id, name, phone, email, status, tags, timestamps
 
@@ -99,6 +120,13 @@ export const users = pgTable(
     tags: jsonb("tags").notNull().default(sql`'[]'::jsonb`),
     bankName: varchar("bank_name", { length: 128 }),
     bankAccountNumber: varchar("bank_account_number", { length: 64 }),
+    // Name on the bank account, captured separately from `name` so a
+    // genuine mismatch is visible/comparable rather than silently assumed
+    // to match (Fasa 2A spec section 9 + sir zul, 22/9: default policy is
+    // account holder name MUST equal the Gold Wallet holder's name; a
+    // mismatch blocks self-service buyback and routes the customer to
+    // manual verification with Miragold).
+    bankAccountHolderName: varchar("bank_account_holder_name", { length: 255 }),
     bankDetailsUpdatedAt: timestamp("bank_details_updated_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -261,3 +289,72 @@ export const pendingAllocations = pgTable("pending_allocations", {
   resolvedAt: timestamp("resolved_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ---------- buyback_requests (Fasa 2A — Module 06: Jual Balik Emas) ----------
+// Customer sells gram back to Miragold. Gram is placed ON HOLD here (NOT
+// deducted from wallet_ledger) the moment the request is created, and stays
+// held through review + payout. The ledger only gets its BUYBACK -gram
+// entry at the final "Complete" step (spec section 7 & 12) — so
+// getWalletBalance() keeps reporting the pre-sale ("Total Gold") balance
+// right up until completion, while getAvailableGold() (src/lib/wallet.ts)
+// subtracts every active request's gram to get what the customer can still
+// use — this is exactly the Total/Available/On Hold split spec section 7
+// requires, without ever touching the ledger early.
+export const buybackRequests = pgTable(
+  "buyback_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    requestRef: varchar("request_ref", { length: 40 }).notNull().unique(), // e.g. JB-20260922-0001
+
+    customerId: uuid("customer_id").notNull().references(() => users.id),
+
+    // Locked at request creation (spec section 5) — never recalculated even
+    // if the admin changes the buyback price while this is in flight.
+    gram: numeric("gram", { precision: 20, scale: 8 }).notNull(),
+    buybackPriceSnapshot: numeric("buyback_price_snapshot", { precision: 18, scale: 6 }).notNull(),
+    payoutAmountRm: numeric("payout_amount_rm", { precision: 18, scale: 6 }).notNull(), // gram * price, locked
+    goldPriceId: uuid("gold_price_id").references(() => goldPrices.id),
+
+    status: buybackStatusEnum("status").notNull().default("PENDING_CONFIRMATION"),
+
+    // OTP confirmation window (spec section 6 — "transaksi sensitif").
+    // Mirrors PRICE_LOCK_MINUTES's role for orders: if the customer never
+    // completes OTP within this window, the request lazily expires and its
+    // hold is released — see expireStaleBuybackRequests() in wallet.ts.
+    otpExpiresAt: timestamp("otp_expires_at", { withTimezone: true }).notNull(),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }), // set when OTP passes -> ON_HOLD
+
+    // Bank details are SNAPSHOTTED from the customer's profile at request
+    // time (spec section 9 shows them on the confirm screen) so a later
+    // profile edit never silently changes where an in-flight payout goes.
+    bankName: varchar("bank_name", { length: 128 }).notNull(),
+    bankAccountNumber: varchar("bank_account_number", { length: 64 }).notNull(),
+    bankAccountHolderName: varchar("bank_account_holder_name", { length: 255 }).notNull(),
+    bankConfirmedByCustomer: boolean("bank_confirmed_by_customer").notNull().default(false),
+
+    // Admin review (spec section 10).
+    reviewedBy: uuid("reviewed_by").references(() => users.id),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    rejectReason: text("reject_reason"), // required for REJECTED/CANCELLED
+
+    // Manual payout (spec section 11).
+    payoutDate: timestamp("payout_date", { withTimezone: true }),
+    payoutReference: varchar("payout_reference", { length: 128 }),
+    payoutAmountPaid: numeric("payout_amount_paid", { precision: 18, scale: 6 }),
+    payoutProcessedBy: uuid("payout_processed_by").references(() => users.id),
+    payoutNote: text("payout_note"),
+
+    // Completion — the ONLY point gram actually leaves the wallet.
+    completedBy: uuid("completed_by").references(() => users.id),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    ledgerEntryId: uuid("ledger_entry_id").references(() => walletLedger.id),
+
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("buyback_requests_customer_id_idx").on(t.customerId),
+    index("buyback_requests_status_idx").on(t.status),
+    index("buyback_requests_created_at_idx").on(t.createdAt),
+  ],
+);

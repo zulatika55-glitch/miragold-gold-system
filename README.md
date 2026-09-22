@@ -12,9 +12,15 @@ Scope build ini (core flow):
   idempotent payment webhook, DB row-locking to prevent double-spend,
   decimal-safe money/gram arithmetic, immutable audit log.
 
-Modules 05–09 (Tebus, Jual Balik, Tukar 999.9, Trade-In, Sankyu/POS) and the
-full Admin Dashboard are **not yet built** — this is the foundation phase.
-The data model already has room for them (see `src/db/schema.ts`).
+Modules 05, 07, 08, 09 (Tebus, Tukar 999.9, Trade-In, Sankyu/POS) and the
+full Admin Dashboard (Module 10) are **not yet built** — the data model
+already has room for them (see `src/db/schema.ts`).
+
+**Fasa 2A — Module 06 (Jual Balik Emas / Buyback)** is built: customer
+sells gram back to Miragold, price+gram locked at confirmation, gold placed
+on hold (never deducted early), OTP-verified, admin review → manual bank
+payout → complete (the only point gram actually leaves the wallet). See
+below.
 
 ## Tech stack
 
@@ -64,6 +70,8 @@ Open http://localhost:3000.
 | `PRICE_SYNC_INTERVAL_SECONDS` | How often to check the source above, default `30` — kept short since a price-lock order created during a stale gap locks in the old price (sir zul, 19/9) |
 | `PRICE_SYNC_SELL_FIELD` | Which JSON field becomes "Harga Jual", default `price_member` |
 | `PRICE_SYNC_BUYBACK_FIELD` | Which JSON field becomes "Harga Beli Balik", default `price_selling` — if the shop's field meanings ever change, remap here instead of touching code |
+| `BUYBACK_OTP_EXPIRY_MINUTES` | Fasa 2A Jual Emas: how long a customer has to enter the OTP after confirming a sell before it lazily expires and the gold hold releases, default `5` |
+| `BUYBACK_MIN_GRAM` | Fasa 2A Jual Emas: minimum gram per sell request, default `0.01` |
 
 ### First login
 
@@ -116,14 +124,77 @@ login, per spec 5.1. An email is required at creation so `OTP_PROVIDER=resend`
 has somewhere to deliver the code. Only an OWNER can grant/revoke the ADMIN
 role; OWNER accounts themselves can't be edited from this page.
 
+## Fasa 2A — Jual Balik Emas (Buyback)
+
+Customer flow: `/wallet` → "Jual Emas" → `/wallet/jual-emas` (pick gram or
+"Jual Semua" → preview → confirm bank details → OTP → done). Admin flow:
+`/admin/buyback` (list, filters, summary cards) → `/admin/buyback/[ref]`
+(Terima & Proses → Rekod Payout → Tandakan Selesai, or Tolak/Batal with a
+mandatory reason at any point before completion).
+
+- **Total vs Available vs On Hold** (`src/lib/wallet.ts`): selling doesn't
+  touch `wallet_ledger` at all until the request is COMPLETED. A new
+  `buyback_requests` row holds the gram (`getGramOnHold()` /
+  `getAvailableGold()`) from the moment it's created — this is what makes
+  "Total Gold" stay put while "Available Gold" drops immediately, exactly
+  as the spec's worked example shows.
+- **Price + gram locked at confirmation, never recalculated** — stored
+  directly on the `buyback_requests` row (`buybackPriceSnapshot`, `gram`,
+  `payoutAmountRm`); a later admin price change never touches an in-flight
+  request.
+- **Hold placed before OTP, not after** (`src/app/api/wallet/buyback/route.ts`):
+  the row-lock + hold happen inside one DB transaction at request creation,
+  so two devices racing to sell the same gram serialize correctly — tested
+  directly (two concurrent requests for the customer's whole balance: one
+  succeeds, the other is correctly told "melebihi baki tersedia").
+  OTP is a separate confirmation step on top, not what creates the hold.
+- **Abandoned OTP auto-releases the hold**: `expireStaleBuybackRequests()`
+  lazily flips any `PENDING_CONFIRMATION` row past its OTP window to
+  `EXPIRED` on the next relevant read (no cron needed) — tested directly.
+- **Paid and Complete are two separate admin actions**, each independently
+  idempotent (a double-click on either is a no-op, not a double-deduction)
+  — the gram/ledger deduction only happens at Complete, inside its own
+  transaction with its own row-claim. Tested directly, including the
+  double-click case.
+- **Bank account holder name must match the wallet holder's name** (sir
+  zul, 22/9) — a mismatch blocks self-service selling entirely (tested
+  directly); changing bank details requires a fresh OTP
+  (`/api/account/bank`), same mechanism as login.
+- **Reject/Cancel never touches the ledger** — only a COMPLETED request
+  ever posts a `BUYBACK` ledger entry; a rejected one just releases the
+  hold. Tested directly (ledger entry count unchanged after reject).
+
+All of the above — partial sell, sell all, over-limit, two-device race for
+the same gram, OTP-abandon expiry, reject-releases-hold, double-approve,
+double-mark-paid, double-complete, and final ledger-vs-liability
+reconciliation — were exercised against a real local Postgres during
+development, not just reasoned about.
+
+**Known UX edge case, not a safety issue**: OTP codes are per-phone, not
+per-request (same as login OTP already works) — if a customer starts a
+*second* Jual Emas request before confirming the *first*, the first
+request's OTP becomes invalid (superseded by the newer one). No gold or
+money is ever at risk either way — the first request simply expires on its
+own via `BUYBACK_OTP_EXPIRY_MINUTES` and releases its hold — but the error
+message ("Kod OTP tidak sah") could confuse a customer who does this. Worth
+a nicer message later; not blocking.
+
+**Not built in this pass** (flag to sir zul if wanted): an admin path to
+create/process a buyback manually for a customer whose bank name
+genuinely, legitimately differs from their wallet name (e.g. a joint
+account) — right now that case is fully blocked to self-service with no
+override, per "block + manual verification" policy. Also no file upload
+for proof-of-payment (spec said this is optional — "boleh disediakan").
+
 ## What's next (not in this build)
 
 Per the spec's own gating (section 25 — "Fasa 2: Staff Pilot" only after
 this core is solid, and "Fasa 3: Legal/Syariah/Accounting review" before
 any public launch):
 
-1. Admin Dashboard / Gold Control Center (Module 10)
-2. Tebus Jewellery (Module 05), Jual Balik / Buyback (Module 06)
+1. Admin Dashboard / Gold Control Center (Module 10) — beyond the summary
+   cards already added to `/admin` for Fasa 2A
+2. Tebus Jewellery (Module 05)
 3. Tukar 999.9 (Module 07) — formula intentionally left PENDING per spec,
    do not hard-code
 4. Trade-In (Module 08)

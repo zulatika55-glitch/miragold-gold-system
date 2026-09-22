@@ -16,9 +16,46 @@ type LedgerEntry = {
   timestamp: string;
 };
 
-type WalletData = { balanceGram: string; note: string; history: LedgerEntry[] };
+type WalletData = { balanceGram: string; gramOnHold: string; totalGram: string; note: string; history: LedgerEntry[] };
 
-type PriceInfo = { sellPrice916: string; rm100Equivalent: string; effectiveAt: string };
+type PriceInfo = { sellPrice916: string; buybackPrice916: string; rm100Equivalent: string; effectiveAt: string };
+
+type BuybackRow = {
+  requestRef: string;
+  createdAt: string;
+  gram: string;
+  buybackPriceSnapshot: string;
+  payoutAmountRm: string;
+  status: string;
+  payoutDate: string | null;
+  payoutReference: string | null;
+  rejectReason: string | null;
+};
+
+// Fasa 2A statuses shown to the customer — kept simple per spec section 13
+// ("Jangan create terlalu banyak status yang mengelirukan staff") even
+// though internally there are a couple more (PENDING_CONFIRMATION, EXPIRED).
+const BUYBACK_STATUS_LABEL: Record<string, string> = {
+  PENDING_CONFIRMATION: "Menunggu OTP",
+  ON_HOLD: "Diterima, Menunggu Semakan",
+  PROCESSING: "Sedang Diproses",
+  PAID: "Pembayaran Direkod",
+  COMPLETED: "Selesai",
+  REJECTED: "Ditolak",
+  CANCELLED: "Dibatalkan",
+  EXPIRED: "Tamat Tempoh (OTP)",
+};
+
+const BUYBACK_STATUS_STYLE: Record<string, string> = {
+  PENDING_CONFIRMATION: "bg-amber-100 text-amber-800",
+  ON_HOLD: "bg-sky-100 text-sky-800",
+  PROCESSING: "bg-sky-100 text-sky-800",
+  PAID: "bg-amber-100 text-amber-800",
+  COMPLETED: "bg-emerald-100 text-emerald-800",
+  REJECTED: "bg-red-100 text-red-700",
+  CANCELLED: "bg-red-100 text-red-700",
+  EXPIRED: "bg-zinc-100 text-zinc-500",
+};
 
 type OrderRow = {
   orderRef: string;
@@ -247,6 +284,7 @@ function WalletContent() {
 
   const [wallet, setWallet] = useState<WalletData | null>(null);
   const [orders, setOrders] = useState<OrderRow[] | null>(null);
+  const [buybacks, setBuybacks] = useState<BuybackRow[] | null>(null);
   const [price, setPrice] = useState<PriceInfo | null>(null);
   const [activeOrder, setActiveOrder] = useState<SingleOrder | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -284,9 +322,10 @@ function WalletContent() {
     let cancelled = false;
 
     async function load() {
-      const [walletRes, ordersRes, priceRes] = await Promise.all([
+      const [walletRes, ordersRes, buybackRes, priceRes] = await Promise.all([
         fetch("/api/wallet"),
         fetch("/api/orders"),
+        fetch("/api/wallet/buyback"),
         fetch("/api/price"),
       ]);
       if (cancelled) return;
@@ -301,6 +340,7 @@ function WalletContent() {
       setWallet(await walletRes.json());
       const ordersData = await ordersRes.json();
       setOrders(ordersData.orders);
+      if (buybackRes.ok) setBuybacks((await buybackRes.json()).requests);
       if (priceRes.ok) setPrice(await priceRes.json());
 
       if (orderRef) {
@@ -371,6 +411,11 @@ function WalletContent() {
             </div>
             <p className="text-3xl font-bold text-amber-900">{hideBalance ? "•••• g" : `${wallet.balanceGram} g`}</p>
             <p className="mt-1 text-xs text-zinc-400">{wallet.note}</p>
+            {Number(wallet.gramOnHold) > 0 && !hideBalance && (
+              <p className="mt-2 inline-flex items-center gap-1 rounded-full bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-800">
+                🔒 {wallet.gramOnHold} g dalam proses Jual Balik
+              </p>
+            )}
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2">
@@ -380,9 +425,12 @@ function WalletContent() {
             <button disabled className="rounded-full border border-zinc-200 px-4 py-2 text-sm text-zinc-400">
               Tebus Emas (coming soon)
             </button>
-            <button disabled className="rounded-full border border-zinc-200 px-4 py-2 text-sm text-zinc-400">
-              Jual Emas (coming soon)
-            </button>
+            <Link
+              href="/wallet/jual-emas"
+              className="rounded-full border border-amber-900/30 px-4 py-2 text-sm font-medium text-amber-900 hover:bg-amber-50"
+            >
+              Jual Emas
+            </Link>
           </div>
 
           {price && (
@@ -400,8 +448,8 @@ function WalletContent() {
                 </p>
               </div>
               <div className="text-right text-sm">
-                <p className="font-semibold tabular-nums text-zinc-700">RM100 = {price.rm100Equivalent}g</p>
-                <p className="font-semibold tabular-nums text-zinc-700">RM{price.sellPrice916} = 1.00g</p>
+                <p className="font-semibold tabular-nums text-zinc-700">Jual: RM{price.sellPrice916}/g</p>
+                <p className="font-semibold tabular-nums text-zinc-700">Beli Balik: RM{price.buybackPrice916}/g</p>
               </div>
             </div>
           )}
@@ -477,6 +525,52 @@ function WalletContent() {
                       </tr>
                     );
                   })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <h2 className="mt-8 text-lg font-medium text-zinc-900">Sejarah Jual Balik Emas</h2>
+          <p className="text-xs text-zinc-400">
+            Harga yang digunakan ketika transaksi — bukan harga beli balik semasa (spec section 14).
+          </p>
+          {buybacks && buybacks.length === 0 ? (
+            <div className="mt-2 rounded-lg border border-dashed border-zinc-200 bg-white px-6 py-8 text-center text-sm text-zinc-400">
+              Belum ada permohonan Jual Emas.
+            </div>
+          ) : (
+            <div className="mt-2 overflow-x-auto rounded-lg border border-zinc-200 bg-white">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-zinc-50 text-zinc-500">
+                  <tr>
+                    <th className="px-3 py-2">Tarikh</th>
+                    <th className="px-3 py-2">Gram</th>
+                    <th className="px-3 py-2">Harga Beli Balik</th>
+                    <th className="px-3 py-2">Jumlah</th>
+                    <th className="px-3 py-2">Status</th>
+                    <th className="px-3 py-2">Rujukan</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {buybacks?.map((b) => (
+                    <tr key={b.requestRef} className="border-t border-zinc-100">
+                      <td className="px-3 py-2 text-zinc-500">{new Date(b.createdAt).toLocaleString("ms-MY")}</td>
+                      <td className="px-3 py-2 font-medium tabular-nums text-amber-900">{b.gram} g</td>
+                      <td className="px-3 py-2 tabular-nums text-zinc-500">RM{b.buybackPriceSnapshot}/g</td>
+                      <td className="px-3 py-2 font-medium tabular-nums">RM{b.payoutAmountRm}</td>
+                      <td className="px-3 py-2">
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs font-medium ${BUYBACK_STATUS_STYLE[b.status] ?? "bg-zinc-100 text-zinc-500"}`}
+                        >
+                          {BUYBACK_STATUS_LABEL[b.status] ?? b.status}
+                        </span>
+                        {b.status === "REJECTED" && b.rejectReason && (
+                          <p className="mt-1 max-w-[180px] text-[11px] text-zinc-400">{b.rejectReason}</p>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-xs text-zinc-400">{b.requestRef}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>

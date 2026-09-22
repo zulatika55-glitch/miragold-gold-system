@@ -15,6 +15,13 @@
       "when": 1789648224714,
       "tag": "0001_lucky_iron_man",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790057158304,
+      "tag": "0002_sharp_sage",
+      "breakpoints": true
     }
   ]
 }

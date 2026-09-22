@@ -9,6 +9,8 @@ type Stats = {
   totalCustomers: number;
   totalStaff: number;
   totalGramInCirculation: string;
+  gramOnHold: string;
+  gramAvailable: string;
   pendingAllocations: number;
   ordersToday: number;
   currentPrice: { sellPrice916: string; buybackPrice916: string } | null;
@@ -81,6 +83,17 @@ export default function AdminDashboardPage() {
           Jumlah gram emas semua customer digabungkan (baki wallet setiap customer dijumlahkan) — ini jumlah gram
           emas yang Miragold berhutang kepada semua pemegang Gold Wallet.
         </p>
+        {stats && Number(stats.gramOnHold) > 0 && (
+          <div className="mt-4 flex flex-wrap gap-4 border-t border-amber-900/10 pt-4 text-sm">
+            <span className="text-zinc-600">
+              Available: <span className="font-semibold text-zinc-900">{stats.gramAvailable} g</span>
+            </span>
+            <span className="text-zinc-600">
+              On Hold (Jual Balik dalam proses):{" "}
+              <span className="font-semibold text-sky-700">{stats.gramOnHold} g</span>
+            </span>
+          </div>
+        )}
       </div>
 
       <p className="mt-8 text-xs font-medium uppercase tracking-widest text-zinc-400">Ringkasan</p>
@@ -127,6 +140,12 @@ export default function AdminDashboardPage() {
           icon="⚖️"
           title="Adjustment Wallet"
           description="Betulkan baki gram customer secara terkawal — mandatori sebab & direkod dalam audit trail."
+        />
+        <AdminCard
+          href="/admin/buyback"
+          icon="💵"
+          title="Jual Balik Emas (Buyback)"
+          description="Semak permohonan Jual Emas customer: terima, tolak, rekod payout & selesaikan."
         />
       </div>
     </main>

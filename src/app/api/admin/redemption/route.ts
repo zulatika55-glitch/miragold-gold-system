@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
-import { redemptions, users, goldPrices, upahRates } from "@/db/schema";
+import { redemptions, users, goldPrices } from "@/db/schema";
 import { and, desc, eq, gte, ilike, inArray, lte, or, sql, type SQL } from "drizzle-orm";
 import { getCurrentUser, isAdminOrAbove } from "@/lib/auth";
 import { expireStaleHolds, getAvailableGold } from "@/lib/wallet";
@@ -142,10 +142,10 @@ const createBodySchema = z.object({
   productName: z.string().min(1).max(255),
   sku: z.string().min(1).max(64),
   itemWeightGram: z.number().positive(),
-  // Explicit upah override (RM). Omit to use itemWeightGram * current
-  // upah_rates rate (spec section 7's default path).
-  upahRm: z.number().min(0).optional(),
-  upahOverrideReason: z.string().min(5).max(1000).optional(),
+  // Flat RM amount staff decides for THIS item (sir zul, 26/9: depends on
+  // the item's design/complexity, never a per-gram rate) — always required,
+  // no computed default.
+  upahRm: z.number().min(0),
   otherChargesRm: z.number().min(0).optional(),
   postageRm: z.number().min(0).optional(),
   deliveryMethod: z.enum(["PICKUP", "DELIVERY"]).default("PICKUP"),
@@ -198,34 +198,9 @@ export async function POST(req: Request) {
   // item, without any special-casing (spec UAT case E).
   const defaultGramUsed = Decimal.min(itemWeightGram, available.gt(0) ? available : new Decimal(0));
 
-  const [currentRate] = await db.select().from(upahRates).orderBy(desc(upahRates.effectiveAt)).limit(1);
-
-  const upahRatePerGramSnapshot: string | null = currentRate?.ratePerGram ?? null;
-  let upahRm: Decimal;
-  let upahOverrideReason: string | null = null;
-
-  if (data.upahRm != null) {
-    upahRm = toDecimal(data.upahRm);
-    const computedDefault = currentRate ? itemWeightGram.times(currentRate.ratePerGram) : null;
-    const isOverride = !computedDefault || !computedDefault.equals(upahRm);
-    if (isOverride) {
-      if (!data.upahOverrideReason) {
-        return NextResponse.json(
-          { error: "Sila berikan sebab kerana upah berbeza daripada kadar standard (spec section 7)" },
-          { status: 400 },
-        );
-      }
-      upahOverrideReason = data.upahOverrideReason;
-    }
-  } else {
-    if (!currentRate) {
-      return NextResponse.json(
-        { error: "Sila tetapkan Kadar Upah dahulu di Urus Kadar Upah sebelum create redemption." },
-        { status: 422 },
-      );
-    }
-    upahRm = itemWeightGram.times(currentRate.ratePerGram);
-  }
+  // Upah is whatever staff types for this specific item — no rate table,
+  // no computed default, no override reason (sir zul, 26/9).
+  const upahRm = toDecimal(data.upahRm);
 
   const otherChargesRm = toDecimal(data.otherChargesRm ?? 0);
   const postageRm = toDecimal(data.postageRm ?? 0);
@@ -241,9 +216,7 @@ export async function POST(req: Request) {
       gramUsed: defaultGramUsed.toFixed(GRAM_STORAGE_DECIMALS),
       sellPriceSnapshot: latestPrice.sellPrice916,
       goldPriceId: latestPrice.id,
-      upahRatePerGramSnapshot,
       upahRm: upahRm.toFixed(6),
-      upahOverrideReason,
       otherChargesRm: otherChargesRm.toFixed(6),
       postageRm: postageRm.toFixed(6),
       deliveryMethod: data.deliveryMethod,

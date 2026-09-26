@@ -27,9 +27,10 @@ built: staff creates a redemption quotation for a customer's real physical
 item (never a design estimate), the customer reviews it, may lower how much
 Gold Wallet gram to apply, then self-confirms via OTP (gold hold begins only
 at that point, never at quotation creation) — any RM shortfall is priced at
-the locked Harga Jual 916 (never the Buyback price) plus admin-configurable
-Upah, paid via Billplz only when there is one, with a pure-gram redemption
-skipping the payment gateway entirely. See below.
+the locked Harga Jual 916 (never the Buyback price) plus Upah (a flat amount
+staff sets per item, never a per-gram rate), paid via Billplz only when
+there is one, with a pure-gram redemption skipping the payment gateway
+entirely. See below.
 
 ## Tech stack
 
@@ -201,9 +202,10 @@ for proof-of-payment (spec said this is optional — "boleh disediakan").
 
 Staff flow: `/admin/redemption` (list, filters, summary cards, "+ Create
 Redemption") → staff enters customer (phone/Customer ID), product name, SKU,
-**real physical weight** of the unit (never a design estimate), upah
-(defaults to the current `/admin/upah-rate` × weight, or an explicit
-override with a mandatory reason), other charges/postage, and pickup vs
+**real physical weight** of the unit (never a design estimate), Upah (a flat
+RM amount staff types in for this specific item — sir zul, 26/9: "upah
+sebenarnya depend pada barang ... kita xkira upah per gram", i.e. never a
+per-gram rate multiplied by weight), other charges/postage, and pickup vs
 delivery. The system computes a default Gold Wallet gram usage (as much as
 Available Gold allows, up to the item's full weight) — a wallet with 0g
 available naturally becomes a plain RM purchase of the item, no special
@@ -232,11 +234,13 @@ before completion.
   locked Harga Jual 916 snapshot (`sellPriceSnapshot`, taken at quotation
   creation, never recalculated even if the admin changes the price while a
   quotation is in flight).
-- **Upah is never hardcoded** (spec section 7) — a versioned `upah_rates`
-  table (`/admin/upah-rate`, mirrors `gold_prices`'s own versioning) drives
-  the default; a completed redemption's audit trail always shows the rate
-  actually in effect when its quotation was created, even after the rate is
-  changed later. A manual override requires a reason.
+- **Upah is never hardcoded, and never a per-gram rate** (spec section 7 +
+  sir zul, 26/9) — staff types the flat RM amount for the specific item at
+  quotation creation (`redemptions.upahRm`), same as Caj Lain/Postage. An
+  earlier version of this build auto-computed Upah as weight × a
+  configurable rate table (`/admin/upah-rate`); that page and table have
+  been removed since that isn't how Upah is actually decided — it depends on
+  the item, not its weight.
 - **RM0 shortfall skips Billplz entirely** (spec section 13 / UAT case E) —
   when the wallet gram alone covers the item (or the wallet is empty and
   this becomes a plain RM purchase), OTP confirmation goes straight to

@@ -398,24 +398,6 @@ export const buybackRequests = pgTable(
   ],
 );
 
-// ---------- upah_rates (Fasa 2B — Module 05 redemption labour charge) ----------
-// spec section 7: "Jangan hardcode RM60/g dalam source code. Sistem perlu
-// benarkan admin masukkan/setting upah kerana kadar Miragold mungkin
-// berubah." Versioned exactly like gold_prices so a completed redemption's
-// audit trail always shows the rate that was actually in effect when its
-// quotation was created (redemptions.upahRatePerGramSnapshot below), even
-// after an admin changes the rate later.
-export const upahRates = pgTable(
-  "upah_rates",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    ratePerGram: numeric("rate_per_gram", { precision: 18, scale: 6 }).notNull(),
-    effectiveAt: timestamp("effective_at", { withTimezone: true }).notNull().defaultNow(),
-    createdBy: uuid("created_by").references(() => users.id),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [index("upah_rates_effective_at_idx").on(t.effectiveAt)],
-);
 
 // ---------- redemptions (Fasa 2B — Module 05: Tebus Barang Kemas) ----------
 // Customer uses Gold Wallet gram (plus RM for any shortfall) to redeem a
@@ -458,15 +440,12 @@ export const redemptions = pgTable(
     sellPriceSnapshot: numeric("sell_price_snapshot", { precision: 18, scale: 6 }).notNull(),
     goldPriceId: uuid("gold_price_id").references(() => goldPrices.id),
 
-    // Upah is a fixed amount for the WHOLE item (spec section 7) — it does
-    // NOT change when the customer later adjusts gramUsed. Never hardcoded:
-    // either computed from the admin-configurable upah_rates table at
-    // creation time (upahRatePerGramSnapshot set) or manually typed in by
-    // staff, which requires upahOverrideReason when it differs from the
-    // computed default.
-    upahRatePerGramSnapshot: numeric("upah_rate_per_gram_snapshot", { precision: 18, scale: 6 }),
+    // Upah is a fixed amount for the WHOLE item (spec section 7), typed in
+    // directly by staff at quotation creation — it depends on the specific
+    // item's design/complexity, not a per-gram rate (sir zul, 26/9: "upah
+    // sebenarnya depend pada barang ... kita xkira upah per gram"). It does
+    // NOT change when the customer later adjusts gramUsed.
     upahRm: numeric("upah_rm", { precision: 18, scale: 6 }).notNull(),
-    upahOverrideReason: text("upah_override_reason"),
 
     otherChargesRm: numeric("other_charges_rm", { precision: 18, scale: 6 }).notNull().default("0"),
     postageRm: numeric("postage_rm", { precision: 18, scale: 6 }).notNull().default("0"),

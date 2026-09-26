@@ -70,9 +70,7 @@ type CreateForm = {
   productName: string;
   sku: string;
   itemWeightGram: string;
-  upahOverride: boolean;
   upahRm: string;
-  upahOverrideReason: string;
   otherChargesRm: string;
   postageRm: string;
   deliveryMethod: "PICKUP" | "DELIVERY";
@@ -87,9 +85,7 @@ const EMPTY_FORM: CreateForm = {
   productName: "",
   sku: "",
   itemWeightGram: "",
-  upahOverride: false,
   upahRm: "",
-  upahOverrideReason: "",
   otherChargesRm: "",
   postageRm: "",
   deliveryMethod: "PICKUP",
@@ -191,12 +187,9 @@ export default function AdminRedemptionPage() {
         productName: form.productName,
         sku: form.sku,
         itemWeightGram: Number(form.itemWeightGram),
+        upahRm: Number(form.upahRm),
         deliveryMethod: form.deliveryMethod,
       };
-      if (form.upahOverride && form.upahRm !== "") {
-        body.upahRm = Number(form.upahRm);
-        if (form.upahOverrideReason) body.upahOverrideReason = form.upahOverrideReason;
-      }
       if (form.otherChargesRm) body.otherChargesRm = Number(form.otherChargesRm);
       if (form.postageRm) body.postageRm = Number(form.postageRm);
       if (form.deliveryMethod === "DELIVERY" && (form.address || form.deliveryPhone || form.note)) {
@@ -352,38 +345,19 @@ export default function AdminRedemptionPage() {
             </>
           )}
 
-          <label className="flex items-center gap-2 text-sm font-medium text-zinc-700 sm:col-span-2">
+          <label className="text-sm font-medium text-zinc-700">
+            Upah (RM) — jumlah keseluruhan untuk barang ini
             <input
-              type="checkbox"
-              checked={form.upahOverride}
-              onChange={(e) => setForm((f) => ({ ...f, upahOverride: e.target.checked }))}
+              required
+              type="number"
+              step="0.01"
+              min="0"
+              value={form.upahRm}
+              onChange={(e) => setForm((f) => ({ ...f, upahRm: e.target.value }))}
+              placeholder="Bergantung pada barang — cth: 70"
+              className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2"
             />
-            Override Upah (default: guna Kadar Upah semasa × berat barang)
           </label>
-          {form.upahOverride && (
-            <>
-              <label className="text-sm font-medium text-zinc-700">
-                Upah (RM) — jumlah keseluruhan
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={form.upahRm}
-                  onChange={(e) => setForm((f) => ({ ...f, upahRm: e.target.value }))}
-                  className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2"
-                />
-              </label>
-              <label className="text-sm font-medium text-zinc-700">
-                Sebab Override
-                <input
-                  value={form.upahOverrideReason}
-                  onChange={(e) => setForm((f) => ({ ...f, upahOverrideReason: e.target.value }))}
-                  placeholder="Cth: produk custom, struktur upah berbeza"
-                  className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2"
-                />
-              </label>
-            </>
-          )}
 
           <label className="text-sm font-medium text-zinc-700">
             Caj Lain (RM, opsyenal)

@@ -12,9 +12,7 @@ type Detail = {
   itemWeightGram: string;
   gramUsed: string;
   sellPriceSnapshot: string;
-  upahRatePerGramSnapshot: string | null;
   upahRm: string;
-  upahOverrideReason: string | null;
   otherChargesRm: string;
   postageRm: string;
   shortfallGram: string;
@@ -200,11 +198,7 @@ export default function AdminRedemptionDetailPage() {
             <Row label="Harga Jual 916 (locked)" value={`RM${detail.sellPriceSnapshot}/g`} />
             <Row label="Kekurangan Gram" value={`${detail.shortfallGram} g`} />
             <Row label="Nilai Kekurangan Emas" value={`RM${detail.shortfallValueRm}`} />
-            <Row
-              label="Upah"
-              value={`RM${detail.upahRm}${detail.upahRatePerGramSnapshot ? ` (kadar RM${detail.upahRatePerGramSnapshot}/g)` : " (override)"}`}
-            />
-            {detail.upahOverrideReason && <Row label="Sebab Override Upah" value={detail.upahOverrideReason} />}
+            <Row label="Upah" value={`RM${detail.upahRm}`} />
             <Row label="Caj Lain" value={`RM${detail.otherChargesRm}`} />
             <Row label="Postage" value={`RM${detail.postageRm}`} />
             <Row label="Jumlah Bayaran RM" value={`RM${detail.totalPaymentRm}`} bold />

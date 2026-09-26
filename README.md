@@ -22,6 +22,15 @@ on hold (never deducted early), OTP-verified, admin review → manual bank
 payout → complete (the only point gram actually leaves the wallet). See
 below.
 
+**Fasa 2B — Module 05 (Tebus Barang Kemas / Jewellery Redemption)** is
+built: staff creates a redemption quotation for a customer's real physical
+item (never a design estimate), the customer reviews it, may lower how much
+Gold Wallet gram to apply, then self-confirms via OTP (gold hold begins only
+at that point, never at quotation creation) — any RM shortfall is priced at
+the locked Harga Jual 916 (never the Buyback price) plus admin-configurable
+Upah, paid via Billplz only when there is one, with a pure-gram redemption
+skipping the payment gateway entirely. See below.
+
 ## Tech stack
 
 - Next.js 16 (App Router, TypeScript, Tailwind)
@@ -72,6 +81,8 @@ Open http://localhost:3000.
 | `PRICE_SYNC_BUYBACK_FIELD` | Which JSON field becomes "Harga Beli Balik", default `price_selling` — if the shop's field meanings ever change, remap here instead of touching code |
 | `BUYBACK_OTP_EXPIRY_MINUTES` | Fasa 2A Jual Emas: how long a customer has to enter the OTP after confirming a sell before it lazily expires and the gold hold releases, default `5` |
 | `BUYBACK_MIN_GRAM` | Fasa 2A Jual Emas: minimum gram per sell request, default `0.01` |
+| `REDEMPTION_OTP_EXPIRY_MINUTES` | Fasa 2B Tebus Barang Kemas: how long a customer has to enter the OTP after tapping "Sahkan Tebusan" before it lazily expires and the gold hold releases, default `5` |
+| `REDEMPTION_PAYMENT_EXPIRY_MINUTES` | Fasa 2B Tebus Barang Kemas: how long the locked shortfall price/quotation stays valid for completing Billplz payment once OTP has passed (spec example: "15 minit selepas pengesahan"), default `15` |
 
 ### First login
 
@@ -186,6 +197,82 @@ account) — right now that case is fully blocked to self-service with no
 override, per "block + manual verification" policy. Also no file upload
 for proof-of-payment (spec said this is optional — "boleh disediakan").
 
+## Fasa 2B — Tebus Barang Kemas (Jewellery Redemption)
+
+Staff flow: `/admin/redemption` (list, filters, summary cards, "+ Create
+Redemption") → staff enters customer (phone/Customer ID), product name, SKU,
+**real physical weight** of the unit (never a design estimate), upah
+(defaults to the current `/admin/upah-rate` × weight, or an explicit
+override with a mandatory reason), other charges/postage, and pickup vs
+delivery. The system computes a default Gold Wallet gram usage (as much as
+Available Gold allows, up to the item's full weight) — a wallet with 0g
+available naturally becomes a plain RM purchase of the item, no special
+casing needed. Customer flow: `/wallet` → "Tebus Barang Kemas" (external
+catalog at miragold.my, per spec's deliberately simple flow — customer picks
+a design via WhatsApp, staff creates the quotation from there) →
+`/wallet/redemption/[ref]` (customer sees the full breakdown, may lower how
+much gram to apply, then **SAHKAN TEBUSAN** → OTP → Billplz payment if there
+is a shortfall, or straight to processing if not). Admin then moves it
+Processing → Ready for Pickup/Delivery → Complete (the only point gram
+actually leaves the wallet), or Cancel with a mandatory reason at any point
+before completion.
+
+- **Hold begins only at customer confirmation, not at quotation creation**
+  (spec section 10) — `AWAITING_CUSTOMER_CONFIRMATION` deliberately holds no
+  gram at all, since staff — not the customer — initiates the request; the
+  hold starts the instant the customer taps "Sahkan Tebusan"
+  (`PENDING_CONFIRMATION` onward), closing the same double-click/multi-device
+  race Buyback already guards against, via the same row-lock pattern
+  (`src/lib/wallet.ts`).
+- **Cross-module hold sharing**: `getGramOnHold()` sums BOTH active Buyback
+  holds and active Redemption holds for a customer, so gram already held for
+  one can never be used to start the other (spec section 22 / UAT case O) —
+  a single shared function, not two independent ones that could drift.
+- **Never the Buyback price** — the shortfall is always priced at the
+  locked Harga Jual 916 snapshot (`sellPriceSnapshot`, taken at quotation
+  creation, never recalculated even if the admin changes the price while a
+  quotation is in flight).
+- **Upah is never hardcoded** (spec section 7) — a versioned `upah_rates`
+  table (`/admin/upah-rate`, mirrors `gold_prices`'s own versioning) drives
+  the default; a completed redemption's audit trail always shows the rate
+  actually in effect when its quotation was created, even after the rate is
+  changed later. A manual override requires a reason.
+- **RM0 shortfall skips Billplz entirely** (spec section 13 / UAT case E) —
+  when the wallet gram alone covers the item (or the wallet is empty and
+  this becomes a plain RM purchase), OTP confirmation goes straight to
+  Processing with zero payment-gateway interaction, verified by the
+  `/complete` route skipping the ledger write when `gramUsed` is 0.
+- **Quotation price-lock never silently changes**: SKU, weight, gram, and
+  price are all locked once the customer starts confirming; any change staff
+  needs to make requires cancelling the old quotation (which releases its
+  hold, never deletes the row — status becomes Cancelled) and creating a new
+  one for fresh customer approval (spec section 14).
+- **Payment idempotency reuses Buyback's proven pattern**: the same Billplz
+  webhook route now dispatches on `reference_1`'s prefix (`RDM-` vs
+  Module 03's order refs) into a dedicated handler that only ever advances
+  `AWAITING_PAYMENT → PAYMENT_CONFIRMED` — the actual gram deduction stays
+  reserved for the admin's explicit `/complete` action, well after the item
+  is physically handed over, exactly mirroring how Buyback separates "Paid"
+  from "Completed" so each has its own idempotency guard.
+- **Complete is idempotent** — claims the row inside the same transaction as
+  the ledger write (same "claim-then-ledger" pattern as Buyback), so a
+  double-click on Complete can only post one ledger entry.
+- **Lazy expiry releases abandoned holds**: `expireStaleRedemptions()`
+  (called alongside Buyback's own via the shared `expireStaleHolds()`)
+  flips a stale `PENDING_CONFIRMATION` (OTP window) or `AWAITING_PAYMENT`
+  (payment window) row to `EXPIRED` on the next relevant read, releasing its
+  hold, no cron needed.
+
+All of the above were verified with `npm run typecheck`, `npm run lint`, and
+`npm run build` passing cleanly; the full 15-scenario UAT checklist from the
+spec (A–O: partial/exact/shortfall/reduced gram usage, empty-wallet routing,
+payment failure/expiry/cancel releasing the hold, price-lock surviving a
+later price change, SKU/weight change requiring a new quotation, double-
+click/two-device/double-complete/duplicate-webhook idempotency, and the
+Buyback-hold-vs-Redemption cross-block) has not yet been exercised against a
+real Postgres + Billplz sandbox by sir zul — that's the next step before
+this is considered UAT-passed, exactly as Fasa 2A was.
+
 ## What's next (not in this build)
 
 Per the spec's own gating (section 25 — "Fasa 2: Staff Pilot" only after
@@ -193,14 +280,17 @@ this core is solid, and "Fasa 3: Legal/Syariah/Accounting review" before
 any public launch):
 
 1. Admin Dashboard / Gold Control Center (Module 10) — beyond the summary
-   cards already added to `/admin` for Fasa 2A
-2. Tebus Jewellery (Module 05)
-3. Tukar 999.9 (Module 07) — formula intentionally left PENDING per spec,
+   cards already added to `/admin` for Fasa 2A/2B
+2. Tukar 999.9 (Module 07) — formula intentionally left PENDING per spec,
    do not hard-code
-4. Trade-In (Module 08)
-5. Sankyu / POS reconciliation (Module 09)
-6. Real OTP/SMS provider once one is chosen
-7. Real Billplz sandbox credentials wired in and end-to-end tested against
+3. Trade-In (Module 08)
+4. Sankyu / POS reconciliation (Module 09)
+5. Real OTP/SMS provider once one is chosen
+6. Real Billplz sandbox credentials wired in and end-to-end tested against
    Billplz's actual sandbox (this build was tested against a locally
    simulated, correctly-signed webhook payload, not a live Billplz call,
    since sandbox API keys weren't available at build time)
+7. Lock/Buy orders (Module 03) abandoned with no payment attempt never
+   lazily expire out of "Menunggu Bayaran" (unlike Buyback/Redemption, which
+   both have lazy expiry) — flagged to sir zul 26/9, deferred by his choice
+   to prioritize Fasa 2B first, not yet fixed

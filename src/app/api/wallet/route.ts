@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { walletLedger } from "@/db/schema";
 import { desc, eq } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
-import { getWalletBalance, getGramOnHold, expireStaleBuybackRequests } from "@/lib/wallet";
+import { getWalletBalance, getGramOnHold, expireStaleHolds } from "@/lib/wallet";
 import { formatGram } from "@/lib/decimal";
 
 // Module 04 — Gold Wallet. Balance is always derived from the ledger
@@ -13,9 +13,10 @@ export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Login required" }, { status: 401 });
 
-  // Release any abandoned Jual Emas holds first so "Baki Emas Anda" /
-  // Available Gold below is never stale (Fasa 2A spec section 7).
-  await expireStaleBuybackRequests(db, user.id);
+  // Release any abandoned Jual Emas / Tebus Barang Kemas holds first so
+  // "Baki Emas Anda" / Available Gold below is never stale (Fasa 2A spec
+  // section 7; Fasa 2B spec section 12).
+  await expireStaleHolds(db, user.id);
 
   const [balance, onHold] = await Promise.all([getWalletBalance(user.id), getGramOnHold(user.id)]);
   const available = balance.minus(onHold);

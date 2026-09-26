@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
-import { users, walletLedger, buybackRequests } from "@/db/schema";
+import { users, walletLedger, buybackRequests, redemptions } from "@/db/schema";
 import { and, eq, inArray, lt } from "drizzle-orm";
 import { Decimal, toDecimal, GRAM_STORAGE_DECIMALS } from "./decimal";
 import { newLedgerRef } from "./refs";
@@ -11,7 +11,21 @@ import type { Executor } from "@/db/types";
 // anything not in this list has either released the hold (REJECTED /
 // CANCELLED / EXPIRED) or already moved the gram out via the ledger
 // (COMPLETED), so it must NOT be double-counted (spec section 7 & 19).
-const ACTIVE_HOLD_STATUSES = ["PENDING_CONFIRMATION", "ON_HOLD", "PROCESSING", "PAID"] as const;
+const BUYBACK_ACTIVE_HOLD_STATUSES = ["PENDING_CONFIRMATION", "ON_HOLD", "PROCESSING", "PAID"] as const;
+
+// Fasa 2B (Redemption) statuses that still hold gram back from the wallet —
+// mirrors BUYBACK_ACTIVE_HOLD_STATUSES above. AWAITING_CUSTOMER_CONFIRMATION
+// is deliberately excluded: spec section 10 places the hold only "selepas
+// customer confirm", so a staff-created quotation the customer hasn't acted
+// on yet ties up nothing (see expireStaleRedemptions below for how the hold
+// releases again if the customer abandons it after confirming).
+const REDEMPTION_ACTIVE_HOLD_STATUSES = [
+  "PENDING_CONFIRMATION",
+  "AWAITING_PAYMENT",
+  "PAYMENT_CONFIRMED",
+  "PROCESSING",
+  "READY_FOR_FULFILLMENT",
+] as const;
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -67,17 +81,97 @@ export async function expireStaleBuybackRequests(executor: Executor = db, custom
   }
 }
 
-/** Total gram currently held across the customer's active (not yet
- * completed/rejected/cancelled/expired) buyback requests — spec section 7's
- * "Gold On Hold". Always call `expireStaleBuybackRequests` first if the
- * caller needs an up-to-date figure (e.g. before accepting a new request). */
-export async function getGramOnHold(customerId: string, executor: Executor = db): Promise<Decimal> {
+/**
+ * Mirrors expireStaleBuybackRequests, for Fasa 2B: releases a redemption's
+ * gold hold if the customer abandons it mid-flow — either the OTP window
+ * (PENDING_CONFIRMATION) or, when there's an RM shortfall to pay, the
+ * payment window (AWAITING_PAYMENT) — spec section 12: "Jika expired sebelum
+ * payment confirmed: Release Gold Hold -> Quotation Expired."
+ */
+export async function expireStaleRedemptions(executor: Executor = db, customerId?: string): Promise<void> {
+  const stalePhases: {
+    fromStatus: "PENDING_CONFIRMATION" | "AWAITING_PAYMENT";
+    deadline: typeof redemptions.otpExpiresAt | typeof redemptions.paymentExpiresAt;
+    reason: string;
+  }[] = [
+    {
+      fromStatus: "PENDING_CONFIRMATION",
+      deadline: redemptions.otpExpiresAt,
+      reason: "Customer did not complete OTP confirmation within the window — hold released.",
+    },
+    {
+      fromStatus: "AWAITING_PAYMENT",
+      deadline: redemptions.paymentExpiresAt,
+      reason: "Customer did not complete payment within the quotation's validity window — hold released.",
+    },
+  ];
+
+  for (const phase of stalePhases) {
+    const conditions = [eq(redemptions.status, phase.fromStatus), lt(phase.deadline, new Date())];
+    if (customerId) conditions.push(eq(redemptions.customerId, customerId));
+
+    const stale = await executor.select({ id: redemptions.id }).from(redemptions).where(and(...conditions));
+
+    for (const row of stale) {
+      const [updated] = await executor
+        .update(redemptions)
+        .set({ status: "EXPIRED", updatedAt: new Date() })
+        .where(and(eq(redemptions.id, row.id), eq(redemptions.status, phase.fromStatus)))
+        .returning();
+
+      if (updated) {
+        await writeAuditLog(executor, {
+          actorType: "SYSTEM",
+          action: "REDEMPTION_EXPIRED",
+          entity: "redemptions",
+          entityId: updated.id,
+          after: updated,
+          reason: phase.reason,
+        });
+      }
+    }
+  }
+}
+
+/** Convenience wrapper: every route that reads Available Gold needs BOTH
+ * lazy-expiry sweeps, since a stale hold in either module would otherwise
+ * understate what a customer can actually use right now. */
+export async function expireStaleHolds(executor: Executor = db, customerId?: string): Promise<void> {
+  await expireStaleBuybackRequests(executor, customerId);
+  await expireStaleRedemptions(executor, customerId);
+}
+
+async function getBuybackGramOnHold(customerId: string, executor: Executor = db): Promise<Decimal> {
   const [row] = await executor
     .select({ total: sql<string>`COALESCE(SUM(${buybackRequests.gram}), 0)` })
     .from(buybackRequests)
-    .where(and(eq(buybackRequests.customerId, customerId), inArray(buybackRequests.status, ACTIVE_HOLD_STATUSES)));
+    .where(and(eq(buybackRequests.customerId, customerId), inArray(buybackRequests.status, BUYBACK_ACTIVE_HOLD_STATUSES)));
 
   return toDecimal(row?.total ?? "0");
+}
+
+async function getRedemptionGramOnHold(customerId: string, executor: Executor = db): Promise<Decimal> {
+  const [row] = await executor
+    .select({ total: sql<string>`COALESCE(SUM(${redemptions.gramUsed}), 0)` })
+    .from(redemptions)
+    .where(and(eq(redemptions.customerId, customerId), inArray(redemptions.status, REDEMPTION_ACTIVE_HOLD_STATUSES)));
+
+  return toDecimal(row?.total ?? "0");
+}
+
+/** Total gram currently held across BOTH the customer's active buyback
+ * requests AND active redemption quotations — spec section 7's "Gold On
+ * Hold", extended by Fasa 2B spec section 22 ("Gold On Hold tak boleh
+ * digunakan untuk Buyback", and symmetrically, gram already held for a
+ * buyback can't be redeemed either — UAT case O exercises exactly this
+ * cross-module hold). Always call `expireStaleHolds` first if the caller
+ * needs an up-to-date figure (e.g. before accepting a new request). */
+export async function getGramOnHold(customerId: string, executor: Executor = db): Promise<Decimal> {
+  const [buyback, redemption] = await Promise.all([
+    getBuybackGramOnHold(customerId, executor),
+    getRedemptionGramOnHold(customerId, executor),
+  ]);
+  return buyback.plus(redemption);
 }
 
 /** Available Gold = Total Gold (ledger balance) minus Gold On Hold (spec

@@ -32,6 +32,51 @@ type BuybackRow = {
   rejectReason: string | null;
 };
 
+type RedemptionRow = {
+  redemptionRef: string;
+  createdAt: string;
+  productName: string;
+  sku: string;
+  itemWeightGram: string;
+  gramUsed: string;
+  shortfallGram: string;
+  totalPaymentRm: string;
+  status: string;
+  deliveryMethod: string;
+  cancelReason: string | null;
+};
+
+// Fasa 2B — needs-customer-action statuses get a link straight back into the
+// confirm/OTP/payment flow (spec section 8-13); everything else is
+// informational only.
+const REDEMPTION_NEEDS_ACTION = ["AWAITING_CUSTOMER_CONFIRMATION", "PENDING_CONFIRMATION", "AWAITING_PAYMENT"];
+
+const REDEMPTION_STATUS_LABEL: Record<string, string> = {
+  AWAITING_CUSTOMER_CONFIRMATION: "Sila Sahkan Tebusan",
+  PENDING_CONFIRMATION: "Menunggu OTP",
+  AWAITING_PAYMENT: "Menunggu Bayaran",
+  PAYMENT_CONFIRMED: "Bayaran Disahkan",
+  PROCESSING: "Sedang Disediakan",
+  READY_FOR_FULFILLMENT: "Sedia Diambil/Dihantar",
+  COMPLETED: "Selesai",
+  REJECTED: "Ditolak",
+  CANCELLED: "Dibatalkan",
+  EXPIRED: "Tamat Tempoh",
+};
+
+const REDEMPTION_STATUS_STYLE: Record<string, string> = {
+  AWAITING_CUSTOMER_CONFIRMATION: "bg-amber-100 text-amber-800",
+  PENDING_CONFIRMATION: "bg-amber-100 text-amber-800",
+  AWAITING_PAYMENT: "bg-amber-100 text-amber-800",
+  PAYMENT_CONFIRMED: "bg-sky-100 text-sky-800",
+  PROCESSING: "bg-sky-100 text-sky-800",
+  READY_FOR_FULFILLMENT: "bg-violet-100 text-violet-800",
+  COMPLETED: "bg-emerald-100 text-emerald-800",
+  REJECTED: "bg-red-100 text-red-700",
+  CANCELLED: "bg-red-100 text-red-700",
+  EXPIRED: "bg-zinc-100 text-zinc-500",
+};
+
 // Fasa 2A statuses shown to the customer — kept simple per spec section 13
 // ("Jangan create terlalu banyak status yang mengelirukan staff") even
 // though internally there are a couple more (PENDING_CONFIRMATION, EXPIRED).
@@ -285,6 +330,7 @@ function WalletContent() {
   const [wallet, setWallet] = useState<WalletData | null>(null);
   const [orders, setOrders] = useState<OrderRow[] | null>(null);
   const [buybacks, setBuybacks] = useState<BuybackRow[] | null>(null);
+  const [redemptions, setRedemptions] = useState<RedemptionRow[] | null>(null);
   const [price, setPrice] = useState<PriceInfo | null>(null);
   const [activeOrder, setActiveOrder] = useState<SingleOrder | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -322,10 +368,11 @@ function WalletContent() {
     let cancelled = false;
 
     async function load() {
-      const [walletRes, ordersRes, buybackRes, priceRes] = await Promise.all([
+      const [walletRes, ordersRes, buybackRes, redemptionRes, priceRes] = await Promise.all([
         fetch("/api/wallet"),
         fetch("/api/orders"),
         fetch("/api/wallet/buyback"),
+        fetch("/api/wallet/redemption"),
         fetch("/api/price"),
       ]);
       if (cancelled) return;
@@ -341,6 +388,7 @@ function WalletContent() {
       const ordersData = await ordersRes.json();
       setOrders(ordersData.orders);
       if (buybackRes.ok) setBuybacks((await buybackRes.json()).requests);
+      if (redemptionRes.ok) setRedemptions((await redemptionRes.json()).redemptions);
       if (priceRes.ok) setPrice(await priceRes.json());
 
       if (orderRef) {
@@ -422,9 +470,14 @@ function WalletContent() {
             <Link href="/checkout" className="rounded-full bg-amber-900 px-4 py-2 text-sm font-medium text-white">
               Beli Emas 916
             </Link>
-            <button disabled className="rounded-full border border-zinc-200 px-4 py-2 text-sm text-zinc-400">
-              Tebus Emas (coming soon)
-            </button>
+            <a
+              href="https://miragold.my"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-full border border-amber-900/30 px-4 py-2 text-sm font-medium text-amber-900 hover:bg-amber-50"
+            >
+              Tebus Barang Kemas
+            </a>
             <Link
               href="/wallet/jual-emas"
               className="rounded-full border border-amber-900/30 px-4 py-2 text-sm font-medium text-amber-900 hover:bg-amber-50"
@@ -569,6 +622,64 @@ function WalletContent() {
                         )}
                       </td>
                       <td className="px-3 py-2 font-mono text-xs text-zinc-400">{b.requestRef}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <h2 className="mt-8 text-lg font-medium text-zinc-900">Sejarah Tebus Barang Kemas</h2>
+          <p className="text-xs text-zinc-400">Quotation yang dicipta oleh staff Miragold untuk anda — sila sahkan yang masih menunggu tindakan.</p>
+          {redemptions && redemptions.length === 0 ? (
+            <div className="mt-2 rounded-lg border border-dashed border-zinc-200 bg-white px-6 py-8 text-center text-sm text-zinc-400">
+              Belum ada quotation tebusan.
+            </div>
+          ) : (
+            <div className="mt-2 overflow-x-auto rounded-lg border border-zinc-200 bg-white">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-zinc-50 text-zinc-500">
+                  <tr>
+                    <th className="px-3 py-2">Tarikh</th>
+                    <th className="px-3 py-2">Produk</th>
+                    <th className="px-3 py-2">Gram Wallet</th>
+                    <th className="px-3 py-2">Perlu Dibayar</th>
+                    <th className="px-3 py-2">Status</th>
+                    <th className="px-3 py-2">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {redemptions?.map((r) => (
+                    <tr key={r.redemptionRef} className="border-t border-zinc-100">
+                      <td className="px-3 py-2 text-zinc-500">{new Date(r.createdAt).toLocaleString("ms-MY")}</td>
+                      <td className="px-3 py-2">
+                        <div className="text-zinc-800">{r.productName}</div>
+                        <div className="text-xs text-zinc-400">{r.sku}</div>
+                      </td>
+                      <td className="px-3 py-2 font-medium tabular-nums text-amber-900">
+                        {r.gramUsed}g / {r.itemWeightGram}g
+                      </td>
+                      <td className="px-3 py-2 font-medium tabular-nums">RM{r.totalPaymentRm}</td>
+                      <td className="px-3 py-2">
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs font-medium ${REDEMPTION_STATUS_STYLE[r.status] ?? "bg-zinc-100 text-zinc-500"}`}
+                        >
+                          {REDEMPTION_STATUS_LABEL[r.status] ?? r.status}
+                        </span>
+                        {r.status === "CANCELLED" && r.cancelReason && (
+                          <p className="mt-1 max-w-[180px] text-[11px] text-zinc-400">{r.cancelReason}</p>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        {REDEMPTION_NEEDS_ACTION.includes(r.status) && (
+                          <Link
+                            href={`/wallet/redemption/${r.redemptionRef}`}
+                            className="inline-block whitespace-nowrap rounded-full bg-amber-900 px-3 py-1 text-xs font-medium text-white hover:bg-amber-800"
+                          >
+                            Sahkan / Bayar
+                          </Link>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

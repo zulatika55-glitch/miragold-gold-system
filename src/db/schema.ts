@@ -103,6 +103,33 @@ export const buybackStatusEnum = pgEnum("buyback_status", [
   "EXPIRED",
 ]);
 
+// Fasa 2B — Module 05 (Tebus Barang Kemas / Jewellery Redemption), spec
+// section 15. "Awaiting Customer Confirmation" is where a staff-created
+// quotation sits before the customer taps "Sahkan Tebusan" — NO gold hold
+// exists yet at this point (spec section 10 says the hold begins only
+// "selepas customer confirm"), so a quotation the customer never acts on
+// never ties up gram. "Pending Confirmation" is the OTP window that opens
+// the instant the customer taps confirm — the hold begins here (mirrors
+// buyback's own PENDING_CONFIRMATION), closing the same double-click/
+// multi-device race spec section 22 and UAT cases K/L require. "Awaiting
+// Payment" / "Payment Confirmed" only apply when there's an RM shortfall to
+// pay (spec section 13); a pure-gram redemption skips both and goes
+// straight from Pending Confirmation to Processing.
+export const redemptionStatusEnum = pgEnum("redemption_status", [
+  "AWAITING_CUSTOMER_CONFIRMATION",
+  "PENDING_CONFIRMATION",
+  "AWAITING_PAYMENT",
+  "PAYMENT_CONFIRMED",
+  "PROCESSING",
+  "READY_FOR_FULFILLMENT",
+  "COMPLETED",
+  "REJECTED",
+  "CANCELLED",
+  "EXPIRED",
+]);
+
+export const deliveryMethodEnum = pgEnum("delivery_method", ["PICKUP", "DELIVERY"]);
+
 // ---------- users ----------
 // spec: users | customer_id, name, phone, email, status, tags, timestamps
 
@@ -207,7 +234,15 @@ export const payments = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     paymentRef: varchar("payment_ref", { length: 40 }).notNull().unique(),
-    orderId: uuid("order_id").notNull().references(() => orders.id),
+    // Nullable — a payment belongs to exactly one of Module 03 (orders) or
+    // Fasa 2B's redemption shortfall payment, never both. Enforced in
+    // application code (the Billplz webhook and each creation site), not a
+    // DB constraint, to keep this migration a simple additive change.
+    // redemptionId has no compile-time .references() because `redemptions`
+    // is declared further down this file (after walletLedger, which its own
+    // ledgerEntryId needs) — see the comment on that table.
+    orderId: uuid("order_id").references(() => orders.id),
+    redemptionId: uuid("redemption_id"),
     provider: varchar("provider", { length: 32 }).notNull().default("BILLPLZ"),
     providerBillId: varchar("provider_bill_id", { length: 128 }), // Billplz bill id
     // idempotency: one provider event id may only allocate gram once (spec 14 & 16.4)
@@ -220,6 +255,7 @@ export const payments = pgTable(
   },
   (t) => [
     index("payments_order_id_idx").on(t.orderId),
+    index("payments_redemption_id_idx").on(t.redemptionId),
     uniqueIndex("payments_idempotency_key_idx").on(t.idempotencyKey),
   ],
 );
@@ -283,7 +319,10 @@ export const auditLogs = pgTable(
 export const pendingAllocations = pgTable("pending_allocations", {
   id: uuid("id").primaryKey().defaultRandom(),
   paymentId: uuid("payment_id").notNull().references(() => payments.id),
-  orderId: uuid("order_id").notNull().references(() => orders.id),
+  // Nullable for the same reason as payments.orderId/redemptionId above —
+  // this queue now serves both Module 03 orders and Fasa 2B redemptions.
+  orderId: uuid("order_id").references(() => orders.id),
+  redemptionId: uuid("redemption_id"),
   reason: text("reason").notNull(),
   resolved: boolean("resolved").notNull().default(false),
   resolvedAt: timestamp("resolved_at", { withTimezone: true }),
@@ -356,5 +395,137 @@ export const buybackRequests = pgTable(
     index("buyback_requests_customer_id_idx").on(t.customerId),
     index("buyback_requests_status_idx").on(t.status),
     index("buyback_requests_created_at_idx").on(t.createdAt),
+  ],
+);
+
+// ---------- upah_rates (Fasa 2B — Module 05 redemption labour charge) ----------
+// spec section 7: "Jangan hardcode RM60/g dalam source code. Sistem perlu
+// benarkan admin masukkan/setting upah kerana kadar Miragold mungkin
+// berubah." Versioned exactly like gold_prices so a completed redemption's
+// audit trail always shows the rate that was actually in effect when its
+// quotation was created (redemptions.upahRatePerGramSnapshot below), even
+// after an admin changes the rate later.
+export const upahRates = pgTable(
+  "upah_rates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ratePerGram: numeric("rate_per_gram", { precision: 18, scale: 6 }).notNull(),
+    effectiveAt: timestamp("effective_at", { withTimezone: true }).notNull().defaultNow(),
+    createdBy: uuid("created_by").references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("upah_rates_effective_at_idx").on(t.effectiveAt)],
+);
+
+// ---------- redemptions (Fasa 2B — Module 05: Tebus Barang Kemas) ----------
+// Customer uses Gold Wallet gram (plus RM for any shortfall) to redeem a
+// physical jewellery item. Staff creates the quotation (spec section 2-3);
+// the customer reviews it, may lower how much gram to apply (spec section
+// 4), then confirms. Gram is placed ON HOLD only once the customer actually
+// confirms (spec section 10) — see ACTIVE_HOLD_STATUSES in wallet.ts — and,
+// exactly like Buyback, the wallet_ledger only gets its REDEMPTION -gram
+// entry at the final "Complete" step (spec section 17), never earlier.
+//
+// Note on table order: this is declared after `walletLedger` (so
+// ledgerEntryId's .references() below is valid) but that means it can't
+// itself be the target of a compile-time .references() from `payments` or
+// `pendingAllocations` above, which are declared earlier in this file — see
+// the comments on their redemptionId columns.
+export const redemptions = pgTable(
+  "redemptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    redemptionRef: varchar("redemption_ref", { length: 40 }).notNull().unique(), // e.g. RDM-20260926-0001
+
+    customerId: uuid("customer_id").notNull().references(() => users.id),
+
+    // Locked at quotation creation (spec section 2-3) — the staff-entered
+    // REAL physical unit weight ("berdasarkan unit barang sebenar ... bukan
+    // anggaran design"), never recalculated afterwards.
+    productName: varchar("product_name", { length: 255 }).notNull(),
+    sku: varchar("sku", { length: 64 }).notNull(),
+    itemWeightGram: numeric("item_weight_gram", { precision: 20, scale: 8 }).notNull(),
+
+    // Customer-adjustable (spec section 4) while status is still
+    // AWAITING_CUSTOMER_CONFIRMATION; becomes locked the instant OTP
+    // confirmation starts (PENDING_CONFIRMATION onward — spec section 14:
+    // staff/system must never silently change a confirmed quotation).
+    gramUsed: numeric("gram_used", { precision: 20, scale: 8 }).notNull(),
+
+    // Harga Jual 916 — spec section 6: redemption shortfall NEVER uses the
+    // Buyback price. Locked at quotation creation, never recalculated even
+    // if the admin updates the price while this is in flight (spec 11).
+    sellPriceSnapshot: numeric("sell_price_snapshot", { precision: 18, scale: 6 }).notNull(),
+    goldPriceId: uuid("gold_price_id").references(() => goldPrices.id),
+
+    // Upah is a fixed amount for the WHOLE item (spec section 7) — it does
+    // NOT change when the customer later adjusts gramUsed. Never hardcoded:
+    // either computed from the admin-configurable upah_rates table at
+    // creation time (upahRatePerGramSnapshot set) or manually typed in by
+    // staff, which requires upahOverrideReason when it differs from the
+    // computed default.
+    upahRatePerGramSnapshot: numeric("upah_rate_per_gram_snapshot", { precision: 18, scale: 6 }),
+    upahRm: numeric("upah_rm", { precision: 18, scale: 6 }).notNull(),
+    upahOverrideReason: text("upah_override_reason"),
+
+    otherChargesRm: numeric("other_charges_rm", { precision: 18, scale: 6 }).notNull().default("0"),
+    postageRm: numeric("postage_rm", { precision: 18, scale: 6 }).notNull().default("0"),
+
+    deliveryMethod: deliveryMethodEnum("delivery_method").notNull().default("PICKUP"),
+    deliveryDetails: jsonb("delivery_details"), // address/phone/notes when DELIVERY
+    deliveryTrackingReference: varchar("delivery_tracking_reference", { length: 128 }),
+
+    status: redemptionStatusEnum("status").notNull().default("AWAITING_CUSTOMER_CONFIRMATION"),
+
+    // OTP confirmation window (spec section 9), set only once the customer
+    // taps "Sahkan Tebusan" — mirrors buyback_requests.otpExpiresAt. This is
+    // also the moment gramUsed starts counting as an active hold (see
+    // ACTIVE_HOLD_STATUSES / expireStaleRedemptions in wallet.ts).
+    otpExpiresAt: timestamp("otp_expires_at", { withTimezone: true }),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }), // set when OTP passes
+
+    // Quotation/price-lock validity for completing payment (spec section 12
+    // example: "Harga ini sah selama 15 minit selepas pengesahan"). Only set
+    // when there is an RM shortfall to actually pay — a pure-gram redemption
+    // (spec section 13's RM0 case) never sets this and skips straight to
+    // PROCESSING.
+    paymentExpiresAt: timestamp("payment_expires_at", { withTimezone: true }),
+    billplzUrl: varchar("billplz_url", { length: 512 }),
+    paymentConfirmedAt: timestamp("payment_confirmed_at", { withTimezone: true }),
+
+    notes: text("notes"), // staff notes at quotation creation
+
+    // Reject/cancel (spec section 15 exceptions + section 18). One shared
+    // pair of fields covers both REJECTED (declined before/at review) and
+    // CANCELLED (customer or staff backs out of an in-flight redemption) —
+    // spec doesn't give the two states different data requirements.
+    cancelReason: text("cancel_reason"),
+    cancelledBy: uuid("cancelled_by").references(() => users.id),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+
+    // Staff begins physically preparing the item (spec: Payment Confirmed ->
+    // Processing).
+    processedBy: uuid("processed_by").references(() => users.id),
+    processedAt: timestamp("processed_at", { withTimezone: true }),
+
+    // Item ready for the customer (spec section 16: Pickup or Delivery).
+    readyBy: uuid("ready_by").references(() => users.id),
+    readyAt: timestamp("ready_at", { withTimezone: true }),
+
+    // Completion — the ONLY point gram actually leaves the wallet (spec
+    // section 17).
+    completedBy: uuid("completed_by").references(() => users.id),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    ledgerEntryId: uuid("ledger_entry_id").references(() => walletLedger.id),
+
+    createdBy: uuid("created_by").notNull().references(() => users.id), // staff who created the quotation
+
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("redemptions_customer_id_idx").on(t.customerId),
+    index("redemptions_status_idx").on(t.status),
+    index("redemptions_created_at_idx").on(t.createdAt),
   ],
 );

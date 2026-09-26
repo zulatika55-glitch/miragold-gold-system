@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { goldPrices, buybackRequests } from "@/db/schema";
 import { desc, eq } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
-import { getAvailableGold, expireStaleBuybackRequests, lockCustomerRow } from "@/lib/wallet";
+import { getAvailableGold, expireStaleHolds, lockCustomerRow } from "@/lib/wallet";
 import { Decimal, toDecimal, formatGram, formatRm, GRAM_STORAGE_DECIMALS } from "@/lib/decimal";
 import { newBuybackRef } from "@/lib/refs";
 import { requestOtp } from "@/lib/otp";
@@ -18,7 +18,7 @@ export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Login required" }, { status: 401 });
 
-  await expireStaleBuybackRequests(db, user.id);
+  await expireStaleHolds(db, user.id);
 
   const rows = await db
     .select()
@@ -105,7 +105,11 @@ export async function POST(req: Request) {
       // for this same customer — the core defence against the "two
       // browsers, same gram" UAT scenario.
       await lockCustomerRow(tx, user.id);
-      await expireStaleBuybackRequests(tx, user.id);
+      // Also releases any stale Fasa 2B redemption hold, and getAvailableGold
+      // below already nets out any STILL-active redemption hold too — so a
+      // customer can never sell gram that's on hold for a Tebus Barang Kemas
+      // quotation (Fasa 2B spec section 22 / UAT case O).
+      await expireStaleHolds(tx, user.id);
 
       const available = await getAvailableGold(user.id, tx);
 

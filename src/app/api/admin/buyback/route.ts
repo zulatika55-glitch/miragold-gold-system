@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { buybackRequests, users } from "@/db/schema";
 import { and, desc, eq, gte, ilike, lte, or, sql, type SQL } from "drizzle-orm";
 import { getCurrentUser, isAdminOrAbove } from "@/lib/auth";
-import { expireStaleBuybackRequests } from "@/lib/wallet";
+import { expireStaleHolds } from "@/lib/wallet";
 import { Decimal, formatGram, formatRm, GRAM_LIABILITY_DECIMALS } from "@/lib/decimal";
 
 // Fasa 2A spec section 8 (Buyback Requests menu) + section 17 (Admin
@@ -15,7 +15,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  await expireStaleBuybackRequests(db);
+  await expireStaleHolds(db);
 
   const url = new URL(req.url);
   const status = url.searchParams.get("status");

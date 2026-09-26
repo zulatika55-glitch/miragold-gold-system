@@ -31,3 +31,7 @@ export function newCustomerId(): string {
 export function newBuybackRef(): string {
   return `JB-${datePart()}-${randomSegment(6)}`;
 }
+
+export function newRedemptionRef(): string {
+  return `RDM-${datePart()}-${randomSegment(6)}`;
+}

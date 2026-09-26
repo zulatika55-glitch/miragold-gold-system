@@ -147,6 +147,18 @@ export default function AdminDashboardPage() {
           title="Jual Balik Emas (Buyback)"
           description="Semak permohonan Jual Emas customer: terima, tolak, rekod payout & selesaikan."
         />
+        <AdminCard
+          href="/admin/redemption"
+          icon="💍"
+          title="Tebus Barang Kemas"
+          description="Cipta quotation redemption, jejak status sehingga selesai & handover."
+        />
+        <AdminCard
+          href="/admin/upah-rate"
+          icon="🛠️"
+          title="Kadar Upah"
+          description="Tetapkan kadar upah (RM/gram) untuk Tebus Barang Kemas — tidak pernah hardcode."
+        />
       </div>
     </main>
   );

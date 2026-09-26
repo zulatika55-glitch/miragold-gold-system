@@ -2,11 +2,12 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
 import { users, walletLedger } from "@/db/schema";
-import { desc, eq, ilike, or } from "drizzle-orm";
+import { desc, eq, ilike, inArray, or } from "drizzle-orm";
 import { getCurrentUser, isAdminOrAbove } from "@/lib/auth";
 import { postLedgerEntry } from "@/lib/wallet";
 import { formatGram, toDecimal } from "@/lib/decimal";
 import { writeAuditLog } from "@/lib/audit";
+import { phoneLookupCandidates } from "@/lib/phone";
 
 // Spec 13 (Audit & Security): staff/admin must never edit a customer's
 // gram balance directly — the ONLY way to correct a balance is a
@@ -60,10 +61,15 @@ export async function POST(req: Request) {
   }
   const { customerQuery, direction, gram, reason } = parsed.data;
 
+  // Found during Fasa 2A UAT (sir zul, 26/9): an exact phone match missed a
+  // real account because `users.phone` for some accounts predates
+  // normalization and isn't stored as +60XXXXXXXXX. Matching every
+  // representation (like the login/OTP lookups already do) means an admin
+  // searching by phone doesn't get a false "Customer not found".
   const [target] = await db
     .select()
     .from(users)
-    .where(or(eq(users.phone, customerQuery), ilike(users.customerId, customerQuery)))
+    .where(or(inArray(users.phone, phoneLookupCandidates(customerQuery)), ilike(users.customerId, customerQuery)))
     .limit(1);
 
   if (!target) {

@@ -134,8 +134,20 @@ export async function requestOtp(
  * always fail as "invalid/expired" — that was a real bug (every brand-new
  * registration was broken). The route calls `consumeOtp()` itself once the
  * whole login/registration actually succeeds.
+ *
+ * Found during Fasa 2A UAT (sir zul, 26/9): `requestOtp()` below always
+ * normalizes the phone before storing the code (via normalizeMyPhone), but
+ * some callers — /api/account/bank and the Jual Emas confirm route — pass
+ * `user.phone` straight from the DB, unnormalized, for any account whose
+ * phone predates normalization (this otp.ts file's own comment already
+ * flagged such accounts exist). That mismatch meant a 100% correct, fresh
+ * OTP code was still rejected as "invalid or expired" for those accounts —
+ * not a timing issue, a lookup that could never match. Normalizing here
+ * too, at the single lowest-level entry point, fixes every current and
+ * future caller at once instead of patching each call site.
  */
-export async function checkOtp(phone: string, code: string): Promise<{ ok: boolean; otpId?: string }> {
+export async function checkOtp(rawPhone: string, code: string): Promise<{ ok: boolean; otpId?: string }> {
+  const phone = normalizeMyPhone(rawPhone);
   const codeHash = hashCode(code);
 
   // Most recent first: if a customer requests a second code (e.g. the

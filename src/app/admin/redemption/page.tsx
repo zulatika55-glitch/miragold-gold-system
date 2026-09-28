@@ -3,9 +3,11 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import RedemptionSharePanel from "@/components/RedemptionSharePanel";
 
 type Row = {
   redemptionRef: string;
+  source: string;
   createdAt: string;
   productName: string;
   sku: string;
@@ -19,6 +21,19 @@ type Row = {
   customerPhone: string;
   customerId: string;
 };
+
+// Sumber tebusan (sir zul, 28/9) — reporting only, tak pernah pengaruhi
+// pengiraan/Gold Hold/Billplz. Barang tak semestinya dari katalog — walk-in
+// kaunter, WhatsApp/TikTok Live, atau barang yang langsung tiada dalam
+// katalog semua sah.
+const SOURCE_LABEL: Record<string, string> = {
+  WALK_IN: "Walk-in Kedai",
+  WHATSAPP: "WhatsApp",
+  TIKTOK_LIVE: "TikTok/Live",
+  CATALOG: "Katalog Website",
+  OTHER: "Lain-lain",
+};
+const SOURCE_OPTIONS = ["WALK_IN", "WHATSAPP", "TIKTOK_LIVE", "CATALOG", "OTHER"] as const;
 
 type Summary = {
   onHold: string;
@@ -66,6 +81,7 @@ const FILTER_STATUSES = [
 ];
 
 type CreateForm = {
+  source: "" | (typeof SOURCE_OPTIONS)[number];
   customerQuery: string;
   productName: string;
   sku: string;
@@ -81,6 +97,7 @@ type CreateForm = {
 };
 
 const EMPTY_FORM: CreateForm = {
+  source: "",
   customerQuery: "",
   productName: "",
   sku: "",
@@ -109,7 +126,11 @@ export default function AdminRedemptionPage() {
   const [form, setForm] = useState<CreateForm>(EMPTY_FORM);
   const [createBusy, setCreateBusy] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const [createSuccess, setCreateSuccess] = useState<string | null>(null);
+  const [createdRedemption, setCreatedRedemption] = useState<{
+    redemptionRef: string;
+    customerName: string;
+    customerPhone: string;
+  } | null>(null);
 
   const load = useCallback(async (search: string, status: string) => {
     setLoading(true);
@@ -180,9 +201,10 @@ export default function AdminRedemptionPage() {
     e.preventDefault();
     setCreateBusy(true);
     setCreateError(null);
-    setCreateSuccess(null);
+    setCreatedRedemption(null);
     try {
       const body: Record<string, unknown> = {
+        source: form.source,
         customerQuery: form.customerQuery,
         productName: form.productName,
         sku: form.sku,
@@ -208,7 +230,11 @@ export default function AdminRedemptionPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "Gagal cipta quotation");
-      setCreateSuccess(`Quotation ${data.redemption.redemptionRef} berjaya dicipta.`);
+      setCreatedRedemption({
+        redemptionRef: data.redemption.redemptionRef,
+        customerName: data.redemption.customerName,
+        customerPhone: data.redemption.customerPhone,
+      });
       setForm(EMPTY_FORM);
       await load(q, statusFilter);
     } catch (e) {
@@ -259,6 +285,25 @@ export default function AdminRedemptionPage() {
           className="mt-6 grid grid-cols-1 gap-3 rounded-2xl border border-amber-900/10 bg-white p-6 sm:grid-cols-2"
         >
           <h2 className="col-span-full text-lg font-medium text-zinc-900">Create Redemption / Tebus Barang Kemas</h2>
+
+          <label className="text-sm font-medium text-zinc-700 sm:col-span-2">
+            Sumber Tebusan
+            <select
+              required
+              value={form.source}
+              onChange={(e) => setForm((f) => ({ ...f, source: e.target.value as CreateForm["source"] }))}
+              className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2"
+            >
+              <option value="" disabled>
+                -- Pilih sumber --
+              </option>
+              {SOURCE_OPTIONS.map((s) => (
+                <option key={s} value={s}>
+                  {SOURCE_LABEL[s]}
+                </option>
+              ))}
+            </select>
+          </label>
 
           <label className="text-sm font-medium text-zinc-700 sm:col-span-2">
             Customer (phone atau Customer ID)
@@ -393,13 +438,27 @@ export default function AdminRedemptionPage() {
           </label>
 
           {createError && <p className="col-span-full text-sm text-red-600">{createError}</p>}
-          {createSuccess && <p className="col-span-full text-sm text-emerald-700">{createSuccess}</p>}
           <button
             disabled={createBusy}
             className="col-span-full mt-2 rounded-full bg-amber-900 px-4 py-2 font-medium text-white transition hover:bg-amber-800 disabled:opacity-50 sm:w-fit"
           >
             {createBusy ? "Menyimpan..." : "Cipta Quotation"}
           </button>
+
+          {createdRedemption && (
+            <div className="col-span-full">
+              <p className="text-sm font-medium text-emerald-700">
+                Quotation {createdRedemption.redemptionRef} berjaya dicipta — sedia dihantar ke customer.
+              </p>
+              <div className="mt-2">
+                <RedemptionSharePanel
+                  redemptionRef={createdRedemption.redemptionRef}
+                  customerName={createdRedemption.customerName}
+                  customerPhone={createdRedemption.customerPhone}
+                />
+              </div>
+            </div>
+          )}
         </form>
       )}
 
@@ -444,6 +503,7 @@ export default function AdminRedemptionPage() {
               <tr>
                 <th className="px-3 py-2">Tarikh</th>
                 <th className="px-3 py-2">Customer</th>
+                <th className="px-3 py-2">Sumber</th>
                 <th className="px-3 py-2">Produk</th>
                 <th className="px-3 py-2">Gram Wallet / Berat</th>
                 <th className="px-3 py-2">Bayaran RM</th>
@@ -454,7 +514,7 @@ export default function AdminRedemptionPage() {
             <tbody>
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-3 py-6 text-center text-zinc-400">
+                  <td colSpan={8} className="px-3 py-6 text-center text-zinc-400">
                     Tiada redemption dijumpai.
                   </td>
                 </tr>
@@ -472,6 +532,7 @@ export default function AdminRedemptionPage() {
                       {r.customerPhone} · {r.customerId}
                     </div>
                   </td>
+                  <td className="px-3 py-2 text-xs text-zinc-500">{SOURCE_LABEL[r.source] ?? r.source}</td>
                   <td className="px-3 py-2">
                     <div className="text-zinc-800">{r.productName}</div>
                     <div className="text-xs text-zinc-400">{r.sku}</div>

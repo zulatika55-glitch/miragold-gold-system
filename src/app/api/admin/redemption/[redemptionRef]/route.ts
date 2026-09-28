@@ -20,6 +20,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ redempti
     .select({
       id: redemptions.id,
       redemptionRef: redemptions.redemptionRef,
+      source: redemptions.source,
       createdAt: redemptions.createdAt,
       productName: redemptions.productName,
       sku: redemptions.sku,

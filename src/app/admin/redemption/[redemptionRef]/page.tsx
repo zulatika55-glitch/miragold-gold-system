@@ -3,9 +3,11 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
+import RedemptionSharePanel from "@/components/RedemptionSharePanel";
 
 type Detail = {
   redemptionRef: string;
+  source: string;
   createdAt: string;
   productName: string;
   sku: string;
@@ -50,6 +52,14 @@ const STATUS_LABEL: Record<string, string> = {
   REJECTED: "Ditolak",
   CANCELLED: "Dibatalkan",
   EXPIRED: "Tamat Tempoh",
+};
+
+const SOURCE_LABEL: Record<string, string> = {
+  WALK_IN: "Walk-in Kedai",
+  WHATSAPP: "WhatsApp",
+  TIKTOK_LIVE: "TikTok/Live",
+  CATALOG: "Katalog Website",
+  OTHER: "Lain-lain",
 };
 
 export default function AdminRedemptionDetailPage() {
@@ -192,6 +202,7 @@ export default function AdminRedemptionDetailPage() {
 
           <div className="mt-6 divide-y divide-zinc-100 rounded-2xl border border-zinc-200 bg-white">
             <Row label="Tarikh Quotation" value={new Date(detail.createdAt).toLocaleString("ms-MY")} />
+            <Row label="Sumber" value={SOURCE_LABEL[detail.source] ?? detail.source} />
             <Row label="Produk" value={`${detail.productName} (${detail.sku})`} />
             <Row label="Berat Barang (locked)" value={`${detail.itemWeightGram} g`} />
             <Row label="Gram Wallet Digunakan" value={`${detail.gramUsed} g`} />
@@ -208,6 +219,16 @@ export default function AdminRedemptionDetailPage() {
             {detail.deliveryTrackingReference && <Row label="Rujukan Tracking" value={detail.deliveryTrackingReference} mono />}
             {detail.notes && <Row label="Nota Staff" value={detail.notes} />}
           </div>
+
+          {detail.status === "AWAITING_CUSTOMER_CONFIRMATION" && (
+            <div className="mt-6">
+              <RedemptionSharePanel
+                redemptionRef={detail.redemptionRef}
+                customerName={detail.customerName}
+                customerPhone={detail.customerPhone}
+              />
+            </div>
+          )}
 
           {detail.status === "CANCELLED" && detail.cancelReason && (
             <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">

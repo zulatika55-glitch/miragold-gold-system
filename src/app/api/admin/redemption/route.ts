@@ -67,6 +67,7 @@ export async function GET(req: Request) {
   const rows = await db
     .select({
       redemptionRef: redemptions.redemptionRef,
+      source: redemptions.source,
       createdAt: redemptions.createdAt,
       productName: redemptions.productName,
       sku: redemptions.sku,
@@ -139,6 +140,9 @@ const deliveryDetailsSchema = z
 
 const createBodySchema = z.object({
   customerQuery: z.string().min(3).max(255), // phone or Customer ID
+  // Where the item came from (sir zul, 28/9) — reporting only, staff must
+  // always pick one explicitly; never affects calculation or Gold Hold.
+  source: z.enum(["WALK_IN", "WHATSAPP", "TIKTOK_LIVE", "CATALOG", "OTHER"]),
   productName: z.string().min(1).max(255),
   sku: z.string().min(1).max(64),
   itemWeightGram: z.number().positive(),
@@ -209,6 +213,7 @@ export async function POST(req: Request) {
     .insert(redemptions)
     .values({
       redemptionRef: newRedemptionRef(),
+      source: data.source,
       customerId: target.id,
       productName: data.productName,
       sku: data.sku,
@@ -242,6 +247,9 @@ export async function POST(req: Request) {
   return NextResponse.json({
     redemption: {
       redemptionRef: created.redemptionRef,
+      source: created.source,
+      customerName: target.name,
+      customerPhone: target.phone,
       productName: created.productName,
       sku: created.sku,
       itemWeightGram: formatGram(created.itemWeightGram),

@@ -130,6 +130,19 @@ export const redemptionStatusEnum = pgEnum("redemption_status", [
 
 export const deliveryMethodEnum = pgEnum("delivery_method", ["PICKUP", "DELIVERY"]);
 
+// Where this redemption quotation originated (sir zul, 28/9): not every item
+// comes from the miragold.my catalog — walk-in counter, WhatsApp/TikTok Live
+// chat, or an item that's simply not listed anywhere are all just as common.
+// Recorded for reporting only; never affects calculation, Gold Hold, or the
+// Billplz/confirm flow.
+export const redemptionSourceEnum = pgEnum("redemption_source", [
+  "WALK_IN",
+  "WHATSAPP",
+  "TIKTOK_LIVE",
+  "CATALOG",
+  "OTHER",
+]);
+
 // ---------- users ----------
 // spec: users | customer_id, name, phone, email, status, tags, timestamps
 
@@ -418,6 +431,13 @@ export const redemptions = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     redemptionRef: varchar("redemption_ref", { length: 40 }).notNull().unique(), // e.g. RDM-20260926-0001
+
+    // Where the customer's item came from (sir zul, 28/9) — reporting only,
+    // never read by computeRedemptionAmounts() or any hold/payment logic.
+    // Defaults to OTHER at the DB level purely so this column can be added
+    // without breaking rows created before it existed; the create form
+    // always requires staff to pick one explicitly for new quotations.
+    source: redemptionSourceEnum("source").notNull().default("OTHER"),
 
     customerId: uuid("customer_id").notNull().references(() => users.id),
 

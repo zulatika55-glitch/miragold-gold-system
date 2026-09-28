@@ -201,17 +201,23 @@ for proof-of-payment (spec said this is optional — "boleh disediakan").
 ## Fasa 2B — Tebus Barang Kemas (Jewellery Redemption)
 
 Staff flow: `/admin/redemption` (list, filters, summary cards, "+ Create
-Redemption") → staff enters customer (phone/Customer ID), product name, SKU,
-**real physical weight** of the unit (never a design estimate), Upah (a flat
-RM amount staff types in for this specific item — sir zul, 26/9: "upah
-sebenarnya depend pada barang ... kita xkira upah per gram", i.e. never a
-per-gram rate multiplied by weight), other charges/postage, and pickup vs
-delivery. The system computes a default Gold Wallet gram usage (as much as
-Available Gold allows, up to the item's full weight) — a wallet with 0g
-available naturally becomes a plain RM purchase of the item, no special
-casing needed. Customer flow: `/wallet` → "Tebus Barang Kemas" (external
-catalog at miragold.my, per spec's deliberately simple flow — customer picks
-a design via WhatsApp, staff creates the quotation from there) →
+Redemption") → staff picks a **Sumber Tebusan** (Walk-in Kedai / WhatsApp /
+TikTok/Live / Katalog Website / Lain-lain — reporting only, see below), then
+enters customer (phone/Customer ID), product name, SKU, **real physical
+weight** of the unit (never a design estimate), Upah (a flat RM amount staff
+types in for this specific item — sir zul, 26/9: "upah sebenarnya depend
+pada barang ... kita xkira upah per gram", i.e. never a per-gram rate
+multiplied by weight), other charges/postage, and pickup vs delivery. The
+system computes a default Gold Wallet gram usage (as much as Available Gold
+allows, up to the item's full weight) — a wallet with 0g available naturally
+becomes a plain RM purchase of the item, no special casing needed. Once
+created, staff gets 3 ways to hand the secure link to the customer — a
+WhatsApp message pre-filled with the link, a Copy Secure Link button, or a
+QR code for a walk-in customer to scan with their OWN phone at the counter
+(`src/components/RedemptionSharePanel.tsx`, also shown persistently on the
+admin detail page while still `AWAITING_CUSTOMER_CONFIRMATION`, for
+redisplay later). Customer flow: open that link (from WhatsApp, a pasted
+link, or the QR scan) → log into their own Gold Wallet →
 `/wallet/redemption/[ref]` (customer sees the full breakdown, may lower how
 much gram to apply, then **SAHKAN TEBUSAN** → OTP → Billplz payment if there
 is a shortfall, or straight to processing if not). Admin then moves it
@@ -219,6 +225,21 @@ Processing → Ready for Pickup/Delivery → Complete (the only point gram
 actually leaves the wallet), or Cancel with a mandatory reason at any point
 before completion.
 
+- **Item does not have to come from the katalog** (sir zul, 28/9) — not
+  every item Miragold sells is listed at miragold.my, and there are walk-in
+  customers with no online footprint at all. `redemptions.source`
+  (`WALK_IN` / `WHATSAPP` / `TIKTOK_LIVE` / `CATALOG` / `OTHER`) just
+  records where the request came from for reporting; it's never read by
+  `computeRedemptionAmounts()`, Gold Hold, or the Billplz/confirm flow, and
+  staff can still always type in a physical item manually regardless of
+  source.
+- **Staff can never confirm/OTP on the customer's behalf** — this was
+  already true structurally before the source/share-link feature above:
+  `/api/wallet/redemption/[ref]/confirm` and `/request-otp` only accept the
+  logged-in customer's own session, and no admin route exists that advances
+  a redemption past `AWAITING_CUSTOMER_CONFIRMATION` other than the
+  customer's own OTP. The WhatsApp/Copy Link/QR panel only gets the same
+  link into the customer's hands faster — it doesn't add or need a bypass.
 - **Hold begins only at customer confirmation, not at quotation creation**
   (spec section 10) — `AWAITING_CUSTOMER_CONFIRMATION` deliberately holds no
   gram at all, since staff — not the customer — initiates the request; the

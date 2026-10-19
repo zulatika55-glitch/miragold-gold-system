@@ -4,6 +4,7 @@ import { orders, payments, users } from "@/db/schema";
 import { desc, eq, ilike, inArray, or } from "drizzle-orm";
 import { getCurrentUser, isAdminOrAbove } from "@/lib/auth";
 import { formatGram, formatRm } from "@/lib/decimal";
+import { expireStaleOrders } from "@/lib/wallet";
 
 // Spec 12: admin must be able to check every transaction — customer, RM,
 // locked price, gram, Billplz reference, payment status, wallet credit
@@ -14,6 +15,10 @@ export async function GET(req: Request) {
   if (!actor || !isAdminOrAbove(actor.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+
+  // Admin's across-all-customers view must be just as current as the
+  // customer-facing one — sweep every stale PENDING order before listing.
+  await expireStaleOrders(db);
 
   const { searchParams } = new URL(req.url);
   const q = searchParams.get("q")?.trim();

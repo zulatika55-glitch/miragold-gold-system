@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
-import { users, walletLedger, buybackRequests, redemptions } from "@/db/schema";
+import { users, walletLedger, buybackRequests, redemptions, orders } from "@/db/schema";
 import { and, eq, inArray, lt } from "drizzle-orm";
 import { Decimal, toDecimal, GRAM_STORAGE_DECIMALS } from "./decimal";
 import { newLedgerRef } from "./refs";
@@ -139,6 +139,46 @@ export async function expireStaleRedemptions(executor: Executor = db, customerId
 export async function expireStaleHolds(executor: Executor = db, customerId?: string): Promise<void> {
   await expireStaleBuybackRequests(executor, customerId);
   await expireStaleRedemptions(executor, customerId);
+}
+
+/**
+ * Module 03 (Lock/Buy Emas 916) counterpart to expireStaleBuybackRequests /
+ * expireStaleRedemptions — flagged by sir zul (26/9) as a gap: unlike
+ * Buyback and Redemption, an abandoned order with no payment attempt never
+ * lazily left "Menunggu Bayaran" on its own. Any PENDING order whose price
+ * lock (lockExpiresAt) has passed without payment is flipped to EXPIRED
+ * here, lazily, on read.
+ *
+ * Deliberately NOT folded into expireStaleHolds(): an order never holds
+ * wallet gram (the customer hasn't paid yet, so nothing was ever deducted
+ * or reserved), so there is no hold to release and no Available Gold impact
+ * — this only keeps the order's own status/history honest. Called
+ * separately wherever order status is read (customer + admin list/detail).
+ */
+export async function expireStaleOrders(executor: Executor = db, customerId?: string): Promise<void> {
+  const conditions = [eq(orders.status, "PENDING"), lt(orders.lockExpiresAt, new Date())];
+  if (customerId) conditions.push(eq(orders.customerId, customerId));
+
+  const stale = await executor.select({ id: orders.id }).from(orders).where(and(...conditions));
+
+  for (const row of stale) {
+    const [updated] = await executor
+      .update(orders)
+      .set({ status: "EXPIRED", updatedAt: new Date() })
+      .where(and(eq(orders.id, row.id), eq(orders.status, "PENDING")))
+      .returning();
+
+    if (updated) {
+      await writeAuditLog(executor, {
+        actorType: "SYSTEM",
+        action: "ORDER_LOCK_EXPIRED",
+        entity: "orders",
+        entityId: updated.id,
+        after: updated,
+        reason: "Customer did not complete payment within the price-lock window — order expired.",
+      });
+    }
+  }
 }
 
 async function getBuybackGramOnHold(customerId: string, executor: Executor = db): Promise<Decimal> {

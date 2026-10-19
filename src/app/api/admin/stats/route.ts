@@ -4,7 +4,7 @@ import { users, walletLedger, pendingAllocations, goldPrices, orders, buybackReq
 import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { getCurrentUser, isAdminOrAbove } from "@/lib/auth";
 import { Decimal, GRAM_LIABILITY_DECIMALS, formatGram, formatRm } from "@/lib/decimal";
-import { expireStaleHolds } from "@/lib/wallet";
+import { expireStaleHolds, expireStaleOrders } from "@/lib/wallet";
 
 // Small set of numbers for the admin dashboard hub — not meant to replace a
 // full reporting module (spec's later Sankyu/reconciliation phase), just
@@ -17,8 +17,11 @@ export async function GET() {
 
   // Release any abandoned Jual Emas / Tebus Barang Kemas holds first so the
   // On Hold figure below is never stale (Fasa 2A spec section 7; Fasa 2B
-  // spec section 12).
+  // spec section 12). Also sweep abandoned Lock/Buy orders (Module 03, sir
+  // zul 26/9 gap, fixed 19/10) so this dashboard never shows a long-dead
+  // order as still pending.
   await expireStaleHolds(db);
+  await expireStaleOrders(db);
 
   const [
     [customerCount],

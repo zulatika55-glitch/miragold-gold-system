@@ -4,6 +4,7 @@ import { orders, payments } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { formatGram, formatRm } from "@/lib/decimal";
+import { expireStaleOrders } from "@/lib/wallet";
 
 // Single order lookup, scoped to the logged-in customer — backs the
 // "Pembayaran Berjaya" success screen (spec 6.7 sample) so it can show the
@@ -13,6 +14,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ orderRef
   if (!user) return NextResponse.json({ error: "Login required" }, { status: 401 });
 
   const { orderRef } = await params;
+
+  // Same lazy-expiry sweep as the list route, scoped to this customer, so a
+  // stale PENDING order shows EXPIRED here too rather than looking frozen.
+  await expireStaleOrders(db, user.id);
+
   const [order] = await db.select().from(orders).where(eq(orders.orderRef, orderRef)).limit(1);
 
   if (!order || order.customerId !== user.id) {

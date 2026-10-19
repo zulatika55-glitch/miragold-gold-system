@@ -8,6 +8,7 @@ import { calcGramFromAmount, formatGram, formatRm, toDecimal } from "@/lib/decim
 import { newOrderRef } from "@/lib/refs";
 import { createBill } from "@/lib/billplz";
 import { writeAuditLog } from "@/lib/audit";
+import { expireStaleOrders } from "@/lib/wallet";
 
 const bodySchema = z.object({
   amountRm: z.number().positive(),
@@ -21,6 +22,11 @@ const MINIMUM_RM = 100;
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Login required" }, { status: 401 });
+
+  // Flip any abandoned price-lock out of "Menunggu Bayaran" before reading,
+  // so a customer never sees a long-dead order as still pending (sir zul,
+  // 26/9 gap, fixed 19/10).
+  await expireStaleOrders(db, user.id);
 
   const rows = await db
     .select()

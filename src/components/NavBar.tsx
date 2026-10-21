@@ -16,6 +16,22 @@ type Me = {
 
 const CATALOG_URL = "https://miragold.my";
 
+// sir zul, 21/10 (master instruction, "Masalah Sidebar/Hamburger Menu") —
+// SELEPAS LOGIN menu items 1-5 (item 6 Katalog, 8 Akaun Saya and 9 Log
+// Keluar are rendered separately below, unchanged). "Status Tebusan Saya"
+// and "Sejarah Transaksi" are anchors into the existing, already-UAT'd
+// /wallet page (not new routes) -- staff still creates every redemption
+// quotation; customers only ever view/confirm their own, never start one
+// here. Reused by both the desktop dropdown and the mobile menu below.
+const MEMBER_LINKS = [
+  { href: "/wallet", label: "Gold Wallet Saya" },
+  { href: "/wallet/dashboard", label: "Dashboard Simpanan Saya" },
+  { href: "/checkout", label: "Beli Emas 916" },
+  { href: "/wallet/jual-emas", label: "Jual Emas" },
+  { href: "/wallet#tebusan", label: "Status Tebusan Saya" },
+  { href: "/wallet#sejarah", label: "Sejarah Transaksi" },
+];
+
 // Small green check next to the Customer ID — signals a verified/active
 // account, matching the "verified" badge customers recognise from other
 // gold savings apps (sir zul, 19/9).
@@ -134,7 +150,7 @@ export default function NavBar() {
                 </button>
 
                 {menuOpen && (
-                  <div className="absolute right-0 mt-2 w-56 overflow-hidden rounded-2xl border border-zinc-200 bg-white py-1.5 shadow-lg shadow-zinc-900/5">
+                  <div className="absolute right-0 mt-2 w-64 overflow-hidden rounded-2xl border border-zinc-200 bg-white py-1.5 shadow-lg shadow-zinc-900/5">
                     <div className="border-b border-zinc-100 px-4 py-2.5">
                       <p className="truncate text-sm font-medium text-zinc-900">{me.name}</p>
                       <p className="mt-0.5 flex items-center gap-1 text-xs text-zinc-400">
@@ -142,6 +158,17 @@ export default function NavBar() {
                         {me.status === "ACTIVE" && <VerifiedBadge />}
                       </p>
                     </div>
+                    {MEMBER_LINKS.map((item) => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setMenuOpen(false)}
+                        className="block px-4 py-2 text-sm text-zinc-700 hover:bg-amber-50 hover:text-amber-900"
+                      >
+                        {item.label}
+                      </Link>
+                    ))}
+                    <div className="border-t border-zinc-100" />
                     <Link
                       href="/account"
                       onClick={() => setMenuOpen(false)}
@@ -168,9 +195,14 @@ export default function NavBar() {
             </>
           )}
           {!loading && !me && (
-            <Link href="/login" className="rounded-full bg-amber-900 px-4 py-1.5 text-white hover:bg-amber-800">
-              Login / Register
-            </Link>
+            <>
+              <Link href="/login?mode=signup" className="text-zinc-700 hover:text-amber-900">
+                Daftar Akaun
+              </Link>
+              <Link href="/login" className="rounded-full bg-amber-900 px-4 py-1.5 text-white hover:bg-amber-800">
+                Log Masuk
+              </Link>
+            </>
           )}
         </nav>
 
@@ -220,10 +252,20 @@ export default function NavBar() {
                           {me.status === "ACTIVE" && <VerifiedBadge />}
                         </p>
                       </div>
+                      {MEMBER_LINKS.map((item) => (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          onClick={() => setMobileOpen(false)}
+                          className="block px-4 py-2.5 text-sm text-zinc-700 hover:bg-amber-50 hover:text-amber-900"
+                        >
+                          {item.label}
+                        </Link>
+                      ))}
                       <Link
                         href="/account"
                         onClick={() => setMobileOpen(false)}
-                        className="block px-4 py-2.5 text-sm text-zinc-700 hover:bg-amber-50 hover:text-amber-900"
+                        className="block border-t border-zinc-100 px-4 py-2.5 text-sm text-zinc-700 hover:bg-amber-50 hover:text-amber-900"
                       >
                         Profil Saya
                       </Link>
@@ -244,13 +286,22 @@ export default function NavBar() {
                   )}
 
                   {!me && (
-                    <Link
-                      href="/login"
-                      onClick={() => setMobileOpen(false)}
-                      className="block border-t border-zinc-100 px-4 py-2.5 text-sm font-medium text-amber-900 hover:bg-amber-50"
-                    >
-                      Login / Register
-                    </Link>
+                    <>
+                      <Link
+                        href="/login?mode=signup"
+                        onClick={() => setMobileOpen(false)}
+                        className="block border-t border-zinc-100 px-4 py-2.5 text-sm text-zinc-700 hover:bg-amber-50 hover:text-amber-900"
+                      >
+                        Daftar Akaun Baharu
+                      </Link>
+                      <Link
+                        href="/login"
+                        onClick={() => setMobileOpen(false)}
+                        className="block px-4 py-2.5 text-sm font-medium text-amber-900 hover:bg-amber-50"
+                      >
+                        Log Masuk
+                      </Link>
+                    </>
                   )}
                 </div>
               )}

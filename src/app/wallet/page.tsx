@@ -471,12 +471,10 @@ function WalletContent() {
               Beli Emas 916
             </Link>
             <a
-              href="https://miragold.my"
-              target="_blank"
-              rel="noopener noreferrer"
+              href="#tebusan"
               className="rounded-full border border-amber-900/30 px-4 py-2 text-sm font-medium text-amber-900 hover:bg-amber-50"
             >
-              Tebus Barang Kemas
+              Status Tebusan Saya
             </a>
             <Link
               href="/wallet/jual-emas"
@@ -485,6 +483,10 @@ function WalletContent() {
               Jual Emas
             </Link>
           </div>
+
+          <Link href="/wallet/dashboard" className="mt-3 inline-block text-xs font-medium text-amber-900 hover:underline">
+            Lihat Dashboard Simpanan Penuh &rarr;
+          </Link>
 
           {price && (
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-900/10 bg-amber-50/50 px-4 py-3">
@@ -507,7 +509,7 @@ function WalletContent() {
             </div>
           )}
 
-          <h2 className="mt-8 text-lg font-medium text-zinc-900">Sejarah Transaksi</h2>
+          <h2 id="sejarah" className="mt-8 scroll-mt-24 text-lg font-medium text-zinc-900">Sejarah Transaksi</h2>
           <p className="text-xs text-zinc-400">Setiap percubaan pembelian — termasuk yang gagal/tamat tempoh.</p>
 
           {orders && orders.length === 0 ? (
@@ -629,7 +631,7 @@ function WalletContent() {
             </div>
           )}
 
-          <h2 className="mt-8 text-lg font-medium text-zinc-900">Sejarah Tebus Barang Kemas</h2>
+          <h2 id="tebusan" className="mt-8 scroll-mt-24 text-lg font-medium text-zinc-900">Sejarah Tebus Barang Kemas</h2>
           <p className="text-xs text-zinc-400">Quotation yang dicipta oleh staff Miragold untuk anda — sila sahkan yang masih menunggu tindakan.</p>
           {redemptions && redemptions.length === 0 ? (
             <div className="mt-2 rounded-lg border border-dashed border-zinc-200 bg-white px-6 py-8 text-center text-sm text-zinc-400">

@@ -21,8 +21,11 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const nextPath = searchParams.get("next") ?? "/wallet";
+  // sir zul, 21/10: menu "Daftar Akaun Baharu" links here with ?mode=signup
+  // so it opens straight on the Daftar tab instead of Log Masuk.
+  const initialMode: Mode = searchParams.get("mode") === "signup" ? "signup" : "login";
 
-  const [mode, setMode] = useState<Mode>("login");
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [step, setStep] = useState<"phone" | "otp">("phone");
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");

@@ -528,3 +528,24 @@ export const redemptions = pgTable(
     index("redemptions_created_at_idx").on(t.createdAt),
   ],
 );
+
+// ---------- savings_targets (Advanced Dashboard, Fungsi 1 & 7) ----------
+// sir zul, 21/10 (Master Instruction, Advanced Savings Dashboard): "Sasaran
+// ini tidak boleh mengubah baki wallet sebenar" -- this table is
+// deliberately NOT referenced anywhere in wallet.ts, has no FK from
+// wallet_ledger, and is never touched by postLedgerEntry() or any
+// hold/expiry logic. One row per customer; both targetGram and
+// monthlyBudgetRm are purely customer preference/planning data.
+export const savingsTargets = pgTable("savings_targets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  customerId: uuid("customer_id")
+    .notNull()
+    .unique()
+    .references(() => users.id),
+  targetGram: numeric("target_gram", { precision: 20, scale: 8 }).notNull(),
+  // Fungsi 7 (Pelan Simpanan Bulanan) -- optional; a target can exist with
+  // no monthly plan attached.
+  monthlyBudgetRm: numeric("monthly_budget_rm", { precision: 18, scale: 6 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});

@@ -31,16 +31,31 @@ async function main() {
     console.log("Created admin user:", admin.customerId, admin.phone, "(login via OTP with this phone)");
   }
 
-  const [price] = await db
-    .insert(goldPrices)
-    .values({
-      sellPrice916: "623.00",
-      buybackPrice916: "600.00",
-      createdBy: adminId,
-    })
-    .returning();
-
-  console.log("Seeded gold price:", price.sellPrice916, "/ buyback", price.buybackPrice916);
+  // Guarded exactly like the admin-user insert above (and for the same
+  // reason): seed-runner's preDeployCommand/startCommand both run this
+  // script on EVERY deploy, not just the first one. An unconditional insert
+  // here means every redeploy stamps a fresh "623.00" test-price row with
+  // effectiveAt = now(), which becomes the live price everywhere (schema's
+  // "most recent effectiveAt wins") and overrides the real price auto-
+  // synced from miragold.my every 30s (priceSync.ts) — discovered 26/10
+  // when several seed-runner redeploys during a Postgres incident silently
+  // reset the live price to this test value, and priceSync's own >10%
+  // safety guard then (correctly, but unhelpfully) refused to auto-correct
+  // it back since the gap from the stale test price was too large.
+  const [existingPrice] = await db.select().from(goldPrices).limit(1);
+  if (existingPrice) {
+    console.log("Gold price already seeded/live — not inserting a test price over it.");
+  } else {
+    const [price] = await db
+      .insert(goldPrices)
+      .values({
+        sellPrice916: "623.00",
+        buybackPrice916: "600.00",
+        createdBy: adminId,
+      })
+      .returning();
+    console.log("Seeded gold price:", price.sellPrice916, "/ buyback", price.buybackPrice916);
+  }
 }
 
 main()

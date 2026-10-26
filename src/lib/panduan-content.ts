@@ -4,10 +4,10 @@
  * Wallet tanpa bantuan staff").
  *
  * PENTING — requirement #9 sir zul: panduan ni cuma boleh describe fungsi
- * yang BENAR-BENAR live. Jangan tambah langkah untuk Download Penyata PDF
- * (masih "Akan Datang" — src/app/wallet/dashboard/page.tsx) atau Ganjaran &
- * Cabaran (masih placeholder, tunggu polisi rasmi). Kalau salah satu fungsi
- * tu di-enable kemudian hari, kemaskini fail ni sekali.
+ * yang BENAR-BENAR live. Download Penyata PDF (Fungsi 12) sudah live
+ * (26/10) — lihat langkah di bawah dalam topik "sejarah-transaksi". Ganjaran
+ * & Cabaran sengaja DIGUGURKAN (bukan sekadar "akan datang") — sir zul,
+ * 26/10: tak perlu buat fungsi ni. Jangan tambah apa-apa langkah untuknya.
  *
  * Tempoh (price lock, OTP window) sengaja TIDAK di-hardcode di sini — ia
  * dibaca terus dari src/lib/buyback.ts dan process.env.PRICE_LOCK_MINUTES
@@ -207,6 +207,10 @@ export const PANDUAN_TOPICS: PanduanTopic[] = [
       {
         title: "Semak Rekod Pergerakan Emas",
         body: "Bahagian \"Rekod Pergerakan Emas\" (dalam Dashboard Simpanan Saya → Penyata & Aktiviti) tunjuk setiap gram masuk dan keluar secara terperinci — pembelian, jualan, tebusan, dan sebarang pelarasan oleh pihak Miragold — lengkap dengan baki selepas setiap transaksi.",
+      },
+      {
+        title: "Download Penyata PDF",
+        body: "Dalam bahagian \"Penyata & Aktiviti\" yang sama, pilih tempoh (1 bulan, 3 bulan, 6 bulan, 1 tahun, atau Semua) lalu tekan \"Download Penyata PDF\". Skrin cetak akan terbuka — pilih \"Simpan sebagai PDF\" untuk muat turun penyata rasmi simpanan emas anda, lengkap dengan baki awal dan baki akhir tempoh tersebut.",
       },
     ],
   },

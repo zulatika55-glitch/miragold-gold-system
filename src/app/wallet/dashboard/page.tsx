@@ -49,6 +49,111 @@ const PERIODS: { key: string; label: string }[] = [
 const QUICK_TARGETS = [1, 5, 10, 20, 50];
 const QUICK_AMOUNTS = [50, 100, 300, 500];
 
+type StatementEntry = {
+  ledgerRef: string;
+  type: string;
+  direction: "IN" | "OUT";
+  gram: string;
+  priceSnapshot: string | null;
+  balanceAfter: string;
+  refId: string;
+  timestamp: string;
+};
+type StatementData = {
+  period: string;
+  generatedAt: string;
+  customer: { name: string; customerId: string };
+  openingBalanceGram: string;
+  closingBalanceGram: string;
+  entries: StatementEntry[];
+};
+
+// Fungsi 12 — Download Penyata PDF. Same "print window -> Simpan sebagai
+// PDF" pattern already used for single-order receipts in
+// src/app/wallet/page.tsx (downloadReceipt()) — no new PDF dependency,
+// and the customer gets the exact same familiar "save as PDF" print
+// dialog either way.
+function formatStatementDate(iso: string): string {
+  const d = new Date(iso);
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = d.getFullYear();
+  let h = d.getHours();
+  const min = String(d.getMinutes()).padStart(2, "0");
+  const ampm = h >= 12 ? "PM" : "AM";
+  h = h % 12 || 12;
+  return `${dd}/${mm}/${yyyy} ${h}:${min} ${ampm}`;
+}
+
+function downloadStatementPdf(data: StatementData, periodLabel: string) {
+  const w = window.open("", "_blank", "noopener,noreferrer,width=820,height=900");
+  if (!w) return;
+  const rows = data.entries
+    .map(
+      (e) => `<tr>
+        <td>${formatStatementDate(e.timestamp)}</td>
+        <td>${LEDGER_TYPE_LABEL[e.type] ?? e.type}</td>
+        <td class="right ${e.direction === "IN" ? "in" : "out"}">${e.direction === "IN" ? "+" : "-"}${e.gram} g</td>
+        <td class="right">${e.balanceAfter} g</td>
+        <td class="ref">${e.refId}</td>
+      </tr>`,
+    )
+    .join("");
+  const html = `<!doctype html>
+<html lang="ms">
+<head>
+<meta charset="utf-8" />
+<title>Penyata Simpanan Emas — ${data.customer.customerId}</title>
+<style>
+  body { font-family: -apple-system, Arial, sans-serif; padding: 32px; color: #27272a; }
+  .brand { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #92400e; margin-bottom: 4px; }
+  h1 { font-size: 18px; margin: 0 0 12px; }
+  .meta { display: flex; justify-content: space-between; font-size: 12px; color: #71717a; margin-bottom: 16px; }
+  .summary { display: flex; gap: 24px; margin-bottom: 20px; }
+  .summary div { flex: 1; border: 1px solid #f4f4f5; border-radius: 10px; padding: 10px 14px; }
+  .summary .label { font-size: 11px; color: #a1a1aa; }
+  .summary .value { font-size: 16px; font-weight: 700; color: #27272a; margin-top: 2px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { text-align: left; font-size: 11px; color: #a1a1aa; font-weight: 600; padding: 6px 8px; border-bottom: 1px solid #e4e4e7; }
+  td { padding: 6px 8px; border-bottom: 1px solid #f4f4f5; }
+  td.right { text-align: right; }
+  td.in { color: #047857; font-weight: 600; }
+  td.out { color: #b91c1c; font-weight: 600; }
+  td.ref { font-family: monospace; font-size: 10px; color: #71717a; }
+  .empty { text-align: center; color: #a1a1aa; padding: 24px 0; }
+  .footer { margin-top: 20px; font-size: 10px; color: #a1a1aa; }
+  @media print { body { padding: 12px; } }
+</style>
+</head>
+<body>
+  <div class="brand">Miragold Gold Wallet</div>
+  <h1>Penyata Simpanan Emas</h1>
+  <div class="meta">
+    <span>${data.customer.name} &middot; ${data.customer.customerId}</span>
+    <span>Tempoh: ${periodLabel} &middot; Dijana: ${formatStatementDate(data.generatedAt)}</span>
+  </div>
+  <div class="summary">
+    <div><div class="label">Baki Awal</div><div class="value">${data.openingBalanceGram} g</div></div>
+    <div><div class="label">Baki Akhir</div><div class="value">${data.closingBalanceGram} g</div></div>
+    <div><div class="label">Jumlah Transaksi</div><div class="value">${data.entries.length}</div></div>
+  </div>
+  ${
+    data.entries.length === 0
+      ? `<p class="empty">Tiada pergerakan emas dalam tempoh ini.</p>`
+      : `<table>
+    <thead><tr><th>Tarikh</th><th>Jenis</th><th class="right">Gram</th><th class="right">Baki Selepas</th><th>Rujukan</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`
+  }
+  <p class="footer">Penyata ini dijana secara automatik daripada rekod wallet_ledger Miragold Gold Wallet dan hanya untuk rujukan peribadi anda.</p>
+</body>
+</html>`;
+  w.document.write(html);
+  w.document.close();
+  w.focus();
+  setTimeout(() => w.print(), 300);
+}
+
 function buildPolyline(values: number[], width: number, height: number, pad = 8): string {
   if (values.length === 0) return "";
   if (values.length === 1) return `${pad},${height - pad} ${width - pad},${height - pad}`;
@@ -78,6 +183,26 @@ export default function SavingsDashboardPage() {
   const [targetForm, setTargetForm] = useState({ gram: "20", budget: "300" });
   const [savingTarget, setSavingTarget] = useState(false);
   const [calcAmount, setCalcAmount] = useState("100");
+
+  const [statementPeriod, setStatementPeriod] = useState("all");
+  const [downloadingStatement, setDownloadingStatement] = useState(false);
+  const [statementError, setStatementError] = useState<string | null>(null);
+
+  async function handleDownloadStatement() {
+    setDownloadingStatement(true);
+    setStatementError(null);
+    try {
+      const res = await fetch(`/api/wallet/statement?period=${statementPeriod}`);
+      if (!res.ok) throw new Error("request failed");
+      const data: StatementData = await res.json();
+      const periodLabel = PERIODS.find((p) => p.key === statementPeriod)?.label ?? "Semua";
+      downloadStatementPdf(data, periodLabel);
+    } catch {
+      setStatementError("Gagal menjana penyata. Sila cuba lagi.");
+    } finally {
+      setDownloadingStatement(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -441,13 +566,30 @@ export default function SavingsDashboardPage() {
           <section className="rounded-2xl border border-amber-900/10 bg-white p-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-sm font-semibold text-zinc-900">Penyata &amp; Aktiviti</h2>
-              <span
-                title="Akan datang"
-                className="cursor-not-allowed rounded-full bg-zinc-100 px-4 py-1.5 text-xs font-medium text-zinc-400"
-              >
-                Download Penyata PDF (Akan Datang)
-              </span>
+              <div className="flex items-center gap-2">
+                <select
+                  value={statementPeriod}
+                  onChange={(e) => setStatementPeriod(e.target.value)}
+                  aria-label="Tempoh penyata"
+                  className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 focus:outline-none"
+                >
+                  {PERIODS.map((p) => (
+                    <option key={p.key} value={p.key}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleDownloadStatement}
+                  disabled={downloadingStatement}
+                  className="rounded-full bg-amber-900 px-4 py-1.5 text-xs font-medium text-white transition hover:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {downloadingStatement ? "Menjana..." : "Download Penyata PDF"}
+                </button>
+              </div>
             </div>
+            {statementError && <p className="mt-2 text-xs text-red-600">{statementError}</p>}
             {recentHistory.length === 0 ? (
               <p className="mt-4 text-sm text-zinc-400">Belum ada pergerakan emas.</p>
             ) : (

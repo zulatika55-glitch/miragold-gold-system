@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { goldPrices, users } from "@/db/schema";
-import { and, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { writeAuditLog } from "@/lib/audit";
 import { toDecimal, formatRm } from "@/lib/decimal";
 
@@ -84,12 +84,45 @@ async function fetchMiragoldPrice(): Promise<{ sell: number; buyback: number } |
   }
 }
 
+// 26/10 incident: several seed-runner redeploys during an unrelated
+// Postgres credential rotation re-ran `db:seed`, and (before db:seed's own
+// fix) its unconditional gold_prices insert stamped fresh "623.00 / 600.00"
+// test-price rows on top of the real synced price every time. Those rows
+// are always created by this dedicated SEED admin user (tags: ["SEED"])
+// with that exact literal value pair — a genuine human price update from
+// sir zul's own admin account never matches both at once, so checking for
+// this exact signature below is safe and narrowly scoped.
+//
+// First attempt at fixing this (same day) tried DELETE-ing the
+// contaminated rows outright, but gold_prices rows can be referenced by
+// orders/buyback_requests/redemptions created while the bad price was live
+// (goldPriceId), so the delete failed on the foreign key and was caught —
+// logged, not crashed, but also not fixed. gold_prices is an
+// insert-only/append log everywhere else in this codebase (manual admin
+// updates never delete either) — this follows that same pattern instead:
+// never delete, just let the real price past the >10% guard specifically
+// when what it's being compared against is this known-bad contamination.
+const SEED_ADMIN_PHONE = "+60100000000";
+const CONTAMINATED_SELL = "623.000000";
+const CONTAMINATED_BUYBACK = "600.000000";
+
+let cachedSeedAdminId: string | null | undefined;
+
+async function getSeedAdminId(): Promise<string | null> {
+  if (cachedSeedAdminId !== undefined) return cachedSeedAdminId;
+  const [seedAdmin] = await db.select().from(users).where(eq(users.phone, SEED_ADMIN_PHONE)).limit(1);
+  cachedSeedAdminId = seedAdmin?.id ?? null;
+  return cachedSeedAdminId;
+}
+
 /**
  * Runs one sync check: fetch the live price, and if it genuinely changed
  * from what's already in gold_prices, insert a new row exactly like a
  * manual admin update would (same audit trail, same >10% guard) — except
  * an unusual jump is never auto-applied, only flagged for a human to check
- * in Urus Harga Emas 916.
+ * in Urus Harga Emas 916. The one exception is the known 26/10 seed
+ * contamination signature above: that specific previous value is never a
+ * real human-set price worth protecting, so it never blocks recovery.
  */
 export async function runPriceSync(): Promise<void> {
   const fetched = await fetchMiragoldPrice();
@@ -104,8 +137,14 @@ export async function runPriceSync(): Promise<void> {
     const unchanged = toDecimal(previous.sellPrice916).eq(newSell) && toDecimal(previous.buybackPrice916).eq(newBuyback);
     if (unchanged) return; // nothing to do — avoid flooding gold_prices every interval
 
+    const seedAdminId = await getSeedAdminId();
+    const isKnownSeedContamination =
+      previous.createdBy === seedAdminId &&
+      previous.sellPrice916 === CONTAMINATED_SELL &&
+      previous.buybackPrice916 === CONTAMINATED_BUYBACK;
+
     const changeRatio = toDecimal(previous.sellPrice916).minus(newSell).abs().dividedBy(previous.sellPrice916);
-    if (changeRatio.gt(WARN_THRESHOLD)) {
+    if (changeRatio.gt(WARN_THRESHOLD) && !isKnownSeedContamination) {
       console.warn(
         `[priceSync] SKIPPED auto-apply: miragold.my sell price RM${formatRm(newSell)} differs from previous RM${formatRm(previous.sellPrice916)} by more than 10%. Needs manual review in Urus Harga Emas 916.`,
       );
@@ -119,6 +158,12 @@ export async function runPriceSync(): Promise<void> {
         reason: "Change from miragold.my exceeds 10% guard — applied manually instead of auto-syncing.",
       });
       return;
+    }
+
+    if (isKnownSeedContamination) {
+      console.log(
+        "[priceSync] Previous price was 26/10 seed contamination (RM623.00/RM600.00) — applying real price despite >10% gap.",
+      );
     }
   }
 
@@ -145,58 +190,6 @@ export async function runPriceSync(): Promise<void> {
   console.log(`[priceSync] Applied new price from miragold.my: sell RM${formatRm(created.sellPrice916)}, buyback RM${formatRm(created.buybackPrice916)}`);
 }
 
-/**
- * One-time self-heal for the 26/10 incident: several seed-runner redeploys
- * during an unrelated Postgres credential rotation re-ran `db:seed`, and
- * (before db:seed's own fix, same commit as this) its unconditional
- * gold_prices insert stamped fresh "623.00 / 600.00" test-price rows on
- * top of the real synced price every time. Those rows are always created
- * by the dedicated SEED admin user (phone +60100000000, tags: ["SEED"])
- * with that exact literal value pair — a genuine human price update never
- * matches both — so this is narrowly scoped to just that signature and
- * safe to leave running permanently: once the contaminated rows are gone
- * it is a no-op forever after.
- *
- * Why this has to run here rather than sir zul fixing it once by hand in
- * Urus Harga Emas 916: he asked for the price to recover on its own, not
- * for a one-off manual form submission — so this removes the bad rows
- * automatically on boot, which uncovers whatever legitimate price was
- * underneath, and the very next sync check below compares against that
- * real baseline instead of the fake one, letting the normal >10% guard
- * (correctly) stop blocking recovery.
- */
-async function repairSeedContaminatedPrice(): Promise<void> {
-  const [seedAdmin] = await db.select().from(users).where(eq(users.phone, "+60100000000")).limit(1);
-  if (!seedAdmin) return;
-
-  const contaminated = await db
-    .select()
-    .from(goldPrices)
-    .where(
-      and(
-        eq(goldPrices.createdBy, seedAdmin.id),
-        eq(goldPrices.sellPrice916, "623.000000"),
-        eq(goldPrices.buybackPrice916, "600.000000"),
-      ),
-    );
-  if (contaminated.length === 0) return;
-
-  for (const row of contaminated) {
-    await db.delete(goldPrices).where(eq(goldPrices.id, row.id));
-    await writeAuditLog(db, {
-      actorType: "SYSTEM",
-      action: "PRICE_SEED_CONTAMINATION_REPAIR",
-      entity: "gold_prices",
-      entityId: row.id,
-      before: row,
-      after: null,
-      reason:
-        "26/10 incident: seed-runner re-ran db:seed and inserted a test price over the real synced price; removed so auto-sync could recover on its own.",
-    });
-  }
-  console.log(`[priceSync] Removed ${contaminated.length} seed-contaminated test-price row(s) from the 26/10 incident.`);
-}
-
 let started = false;
 
 /**
@@ -212,15 +205,7 @@ export function startPriceSyncScheduler(): void {
   const intervalMs = Math.max(10, INTERVAL_SECONDS) * 1000;
   console.log(`[priceSync] Auto price sync enabled — checking ${SOURCE_URL} every ${INTERVAL_SECONDS} second(s).`);
 
-  // Clean up any 26/10-incident contamination first, THEN start the regular
-  // sync loop — so the very first real sync check compares against a real
-  // baseline rather than the fake seeded one.
-  void repairSeedContaminatedPrice()
-    .catch((err) =>
-      console.error("[priceSync] contamination repair failed:", err instanceof Error ? err.message : err),
-    )
-    .finally(() => {
-      setTimeout(() => void runPriceSync(), 3_000);
-      setInterval(() => void runPriceSync(), intervalMs);
-    });
+  // Run once shortly after boot, then on the regular interval.
+  setTimeout(() => void runPriceSync(), 3_000);
+  setInterval(() => void runPriceSync(), intervalMs);
 }

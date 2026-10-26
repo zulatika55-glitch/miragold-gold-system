@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import HelpButton from "@/components/HelpButton";
 
 // Advanced Dashboard — "Dashboard Simpanan Saya" (sir zul, Master
 // Instruction 21/10, approved STEP 2 proposal). This is an ADDITIONAL page,
@@ -184,6 +185,7 @@ export default function SavingsDashboardPage() {
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-6 pb-16 pt-8">
+      <HelpButton href="/panduan/dashboard-simpanan" />
       <Link href="/wallet" className="text-sm text-zinc-500 hover:text-amber-900">
         &larr; Kembali ke Gold Wallet
       </Link>

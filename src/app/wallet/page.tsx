@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import HelpButton from "@/components/HelpButton";
 
 type LedgerEntry = {
   ledgerRef: string;
@@ -737,6 +738,7 @@ export default function WalletPage() {
   return (
     <Suspense>
       <WalletContent />
+      <HelpButton />
     </Suspense>
   );
 }

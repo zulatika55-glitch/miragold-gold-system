@@ -113,6 +113,12 @@ export default function NavBar() {
               >
                 Katalog Barang Kemas
               </a>
+              {/* Pusat Panduan Pengguna (sir zul, requirement #1) — visible
+                  before AND after login, so it lives here next to Katalog
+                  rather than inside the member-only "Akaun Saya" dropdown. */}
+              <Link href="/panduan" className="hidden text-sm text-zinc-700 hover:text-amber-900 sm:block">
+                Panduan Pengguna
+              </Link>
             </>
           )}
         </div>
@@ -233,6 +239,13 @@ export default function NavBar() {
                   >
                     Katalog Barang Kemas
                   </a>
+                  <Link
+                    href="/panduan"
+                    onClick={() => setMobileOpen(false)}
+                    className="block border-t border-zinc-100 px-4 py-2.5 text-sm text-zinc-700 hover:bg-amber-50 hover:text-amber-900"
+                  >
+                    Panduan Pengguna
+                  </Link>
 
                   {me && (
                     <>
